@@ -1,0 +1,188 @@
+ExoneraTor
+==========
+
+This README describes the steps for installing ExoneraTor on Debian
+GNU/Linux Wheezy.  Instructions for other operating systems may vary.
+
+In the following it is assumed that root privileges are available.
+Commands requiring root privileges will be prefixed with # below.
+
+Start by adding a metrics user that will be used to execute all commands
+that do not require root privileges.  These commands will be prefixed with
+$ below.
+
+# adduser metrics
+
+The database importer and website sources will be installed in
+/srv/exonerator.torproject.org/ that is created as follows:
+
+# mkdir /srv/exonerator.torproject.org/
+# chmod g+ws /srv/exonerator.torproject.org/
+# chown metrics:metrics /srv/exonerator.torproject.org/
+
+Clone the exonerator Git repository:
+
+$ cd /srv/exonerator.torproject.org/
+$ git clone https://git.torproject.org/exonerator.git
+
+Install Java, Ant, PostgreSQL, and a couple packages containing .jar files
+that are necessary for setting up the ExoneraTor database.
+
+# apt-get install openjdk-6-jdk ant postgresql libcommons-codec-java \
+  libpostgresql-jdbc-java
+
+Check the versions of the newly installed tools.
+
+$ java -version
+java version "1.6.0_27"
+OpenJDK Runtime Environment (IcedTea6 1.12.6) (6b27-1.12.6-1~deb7u1)
+OpenJDK 64-Bit Server VM (build 20.0-b12, mixed mode)
+
+$ ant -version
+Apache Ant(TM) version 1.8.2 compiled on September 22 2011
+
+$ psql --version
+psql (PostgreSQL) 9.1.9
+contains support for command-line editing
+
+Create a new metrics database user.  There is no need to give the metrics
+user superuser privileges or allow it to create databases or new roles.
+
+# sudo -u postgres createuser -P metrics
+
+Create a new database exonerator owned by user metrics.
+
+# sudo -u postgres createdb -O metrics exonerator
+
+Import the exonerator database schema.
+
+$ psql -f /srv/exonerator.torproject.org/exonerator/db/exonerator.sql \
+  exonerator
+
+Confirm that the database now contains tables to hold ExoneraTor data.  In
+the following, => will be used as the database prompt.
+
+$ psql exonerator
+=> \dt+
+=> \q
+
+Run the Java database importer.
+
+$ ./run-exonerator.sh
+
+The database import will take a while.  Once it's complete, check that the
+database tables now contain data:
+
+$ psql exonerator
+=> \dt+
+=> \q
+
+Add a crontab entry for the database importer to run once per hour:
+
+20 * * * * cd /srv/exonerator.torproject.org/exonerator/ && \
+  ./run-exonerator.sh
+
+The Apache HTTP Server is used as the front-end web server that serves
+static resources itself and forwards requests for dynamic resources to
+Apache Tomcat.
+
+Start by installing Apache:
+
+# apt-get install apache2
+
+Disable Apache's default site.
+
+# a2dissite default
+
+Enable mod_proxy to forward requests to Tomcat.
+
+# a2enmod proxy_http
+
+Create a new virtual host configuration and store it in a new file
+/etc/apache2/sites-available/exonerator.torproject.org with the following
+content:
+
+<VirtualHost *:80>
+  ServerName exonerator.torproject.org
+  ServerAdmin torproject-admin@torproject.org
+  ErrorLog /var/log/apache2/error.log
+  CustomLog /var/log/apache2/access.log combined
+  ServerSignature On
+  <IfModule mod_proxy.c>
+    <Proxy *>
+      Order deny,allow
+      Allow from all
+    </Proxy>
+    ProxyPass / http://127.0.0.1:8080/exonerator/ retry=15
+    ProxyPassReverse / http://127.0.0.1:8080/exonerator/
+    ProxyPreserveHost on
+  </IfModule>
+</VirtualHost>
+
+Enable the new virtual host.
+
+# a2ensite exonerator.torproject.org
+
+Restart Apache just to be sure that all changes are effective.
+
+# service apache2 restart
+
+Apache Tomcat will process requests for dynamic resources.
+
+Install Tomcat:
+
+# apt-get install tomcat6
+
+Replace Tomcat's default configuration in /etc/tomcat6/server.xml with the
+following configuration:
+
+<Server port="8005" shutdown="SHUTDOWN">
+  <Service name="Catalina">
+    <Connector port="8080" maxHttpHeaderSize="8192"
+               maxThreads="150" minSpareThreads="25" maxSpareThreads="75"
+               enableLookups="false" redirectPort="8443" acceptCount="100"
+               connectionTimeout="20000" disableUploadTimeout="true"
+               compression="off" compressionMinSize="2048"
+               noCompressionUserAgents="gozilla, traviata"
+               compressableMimeType="text/html,text/xml,text/plain" />
+    <Engine name="Catalina" defaultHost="yatei.torproject.org">
+      <Host name="metrics.torproject.org" appBase="webapps"
+            unpackWARs="true" autoDeploy="true"
+            xmlValidation="false" xmlNamespaceAware="false">
+        <Alias>yatei.torproject.org</Alias>
+        <Valve className="org.apache.catalina.valves.AccessLogValve"
+               directory="logs" prefix="exonerator_access_log."
+               suffix=".txt" pattern="%l %u %t %r %s %b"
+               resolveHosts="false"/>
+      </Host>
+    </Engine>
+  </Service>
+</Server>
+
+Update the database password in
+/srv/exonerator.torproject.org/exonerator/etc/context.xml.
+
+Note that this context.xml file might be ignored by Tomcat in some cases,
+depending on its configuration.  In that case, copy the file to the server
+to /var/lib/tomcat6/conf/Catalina/metrics.torproject.org/exonerator.xml .
+
+Now generate the web application.
+
+$ ant war
+
+Create a symbolic link to the exonerator.war file:
+
+# ln -s /srv/exonerator.torproject.org/exonerator/exonerator.war \
+  /var/lib/tomcat6/webapps/
+
+Tomcat will now attempt to deploy the web application automatically.
+
+Whenever the ExoneraTor website needs to be redeployed, generate a new
+.war file and Tomcat will reload the web application automatically.
+
+Restart Tomcat to make all configuration changes effective:
+
+# service tomcat6 restart
+
+The ExoneraTor website should now work.
+

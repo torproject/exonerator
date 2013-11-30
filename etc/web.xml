@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<web-app version="2.4"
+  xmlns="http://java.sun.com/xml/ns/j2ee"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://java.sun.com/xml/ns/j2ee 
+  http://java.sun.com/xml/ns/j2ee/web-app_2_4.xsd" >
+
+  <servlet>
+    <servlet-name>ExoneraTor</servlet-name>
+    <servlet-class>
+      org.torproject.exonerator.ExoneraTorServlet
+    </servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>ExoneraTor</servlet-name>
+    <url-pattern>/index.html</url-pattern>
+  </servlet-mapping>
+
+  <servlet>
+    <servlet-name>ServerDescriptor</servlet-name>
+    <servlet-class>
+      org.torproject.exonerator.ServerDescriptorServlet
+    </servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>ServerDescriptor</servlet-name>
+    <url-pattern>/serverdesc</url-pattern>
+  </servlet-mapping>
+
+  <servlet>
+    <servlet-name>Consensus</servlet-name>
+    <servlet-class>
+      org.torproject.exonerator.ConsensusServlet
+    </servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>Consensus</servlet-name>
+    <url-pattern>/consensus</url-pattern>
+  </servlet-mapping>
+
+  <welcome-file-list>
+    <welcome-file>index.html</welcome-file>
+  </welcome-file-list>
+
+  <resource-ref>
+    <description>ExoneraTor Database</description>
+    <res-ref-name>jdbc/exonerator</res-ref-name>
+    <res-type>javax.sql.DataSource</res-type>
+    <res-auth>Container</res-auth>
+  </resource-ref>
+
+</web-app>
+
