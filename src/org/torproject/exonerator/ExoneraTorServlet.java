@@ -2,10 +2,8 @@
  * See LICENSE for licensing information */
 package org.torproject.exonerator;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.io.StringReader;
 import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -24,7 +22,6 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javax.naming.Context;
@@ -99,13 +96,11 @@ public class ExoneraTorServlet extends HttpServlet {
         + "        <br>\n"
         + "        <p>ExoneraTor tells you whether there was a Tor relay "
           + "running on a given IP address at a given time. ExoneraTor "
-          + "can further indicate whether this relay permitted exiting "
-          + "to a given server and/or TCP port. ExoneraTor learns these "
-          + "facts by parsing the public relay lists and relay "
-          + "descriptors that are collected from the Tor directory "
-          + "authorities and the exit lists collected by TorDNSEL. By "
-          + "inputting an IP address and time, you can determine whether "
-          + "that IP was then a part of the Tor network.</p>\n"
+          + "learns these facts by parsing the public relay lists that "
+          + "are collected from the Tor directory authorities and the "
+          + "exit lists collected by TorDNSEL. By inputting an IP "
+          + "address and time, you can determine whether that IP was "
+          + "then a part of the Tor network.</p>\n"
         + "        <br>\n"
         + "        <p><font color=\"red\"><b>Notice:</b> Note that the "
           + "information you are providing below may be visible to "
@@ -288,70 +283,8 @@ public class ExoneraTorServlet extends HttpServlet {
       timestampWarning = "Please provide a date.";
     }
 
-    /* Parse target IP parameter. */
-    String targetIP = "", targetPort = "", target = "";
-    String[] targetIPParts = null;
-    String targetAddrParameter = request.getParameter("targetaddr");
-    String targetAddrWarning = "";
-    if (targetAddrParameter != null && targetAddrParameter.length() > 0) {
-      Matcher targetAddrParameterMatcher =
-          ipv4AddressPattern.matcher(targetAddrParameter);
-      if (targetAddrParameterMatcher.matches()) {
-        String[] targetAddrParts = targetAddrParameter.split("\\.");
-        targetIP = Integer.parseInt(targetAddrParts[0]) + "."
-            + Integer.parseInt(targetAddrParts[1]) + "."
-            + Integer.parseInt(targetAddrParts[2]) + "."
-            + Integer.parseInt(targetAddrParts[3]);
-        target = targetIP;
-        targetIPParts = targetIP.split("\\.");
-      } else {
-        targetAddrWarning = "\"" + (targetAddrParameter.length() > 20 ?
-            StringEscapeUtils.escapeHtml(targetAddrParameter.substring(
-            0, 20)) + "[...]" : StringEscapeUtils.escapeHtml(
-            targetAddrParameter)) + "\" is not a valid IP address.";
-      }
-    }
-
-    /* Parse target port parameter. */
-    String targetPortParameter = request.getParameter("targetport");
-    String targetPortWarning = "";
-    if (targetPortParameter != null && targetPortParameter.length() > 0) {
-      Pattern targetPortPattern = Pattern.compile("\\d+");
-      if (targetPortParameter.length() < 5 &&
-          targetPortPattern.matcher(targetPortParameter).matches() &&
-          !targetPortParameter.equals("0") &&
-          Integer.parseInt(targetPortParameter) < 65536) {
-        targetPort = targetPortParameter;
-        if (target != null) {
-          target += ":" + targetPort;
-        } else {
-          target = targetPort;
-        }
-      } else {
-        targetPortWarning = "\"" + (targetPortParameter.length() > 8 ?
-            StringEscapeUtils.escapeHtml(targetPortParameter.
-            substring(0, 8)) + "[...]" :
-            StringEscapeUtils.escapeHtml(targetPortParameter))
-            + "\" is not a valid TCP port.";
-      }
-    }
-
-    /* If target port is provided, a target address must be provided,
-     * too. */
-    /* TODO Relax this requirement. */
-    if (targetPort.length() > 0 && targetIP.length() < 1 &&
-        targetAddrWarning.length() < 1) {
-      targetAddrWarning = "Please provide an IP address.";
-    }
-
     /* Write form with IP address and timestamp. */
     out.println("        <form action=\"#relay\">\n"
-        + "          <input type=\"hidden\" name=\"targetaddr\" "
-        + (targetIP.length() > 0 ? " value=\"" + targetIP + "\"" : "")
-        + ">\n"
-        + "          <input type=\"hidden\" name=\"targetPort\""
-        + (targetPort.length() > 0 ? " value=\"" + targetPort + "\"" : "")
-        + ">\n"
         + "          <table>\n"
         + "            <tr>\n"
         + "              <td align=\"right\">IP address in question:"
@@ -730,319 +663,9 @@ public class ExoneraTorServlet extends HttpServlet {
           }
           out.println("<p>Be sure to try out the previous/next day.</p>");
         }
-        /* We didn't find any descriptor.  No need to look up targets. */
-        writeFooter(out);
-        try {
-          conn.close();
-          this.logger.info("Returned a database connection to the pool "
-              + "after " + (System.currentTimeMillis()
-              - requestedConnection) + " millis.");
-        } catch (SQLException e) {
-        }
-        return;
       }
     }
 
-    /* Looking up targets for IPv6 is not supported yet. */
-    if (relayIP.contains(":")) {
-      writeFooter(out);
-      return;
-    }
-
-    /* Second part: target */
-    out.println("<br><a name=\"exit\"></a><h3>Was this relay configured "
-        + "to permit exiting to a given target?</h3>");
-
-    out.println("        <form action=\"#exit\">\n"
-        + "              <input type=\"hidden\" name=\"timestamp\"\n"
-        + "                         value=\"" + timestampStr + "\">\n"
-        + "              <input type=\"hidden\" name=\"ip\" "
-          + "value=\"" + relayIP + "\">\n"
-        + "          <table>\n"
-        + "            <tr>\n"
-        + "              <td align=\"right\">Target address:</td>\n"
-        + "              <td><input type=\"text\" name=\"targetaddr\""
-          + (targetIP.length() > 0 ? " value=\"" + targetIP + "\"" : "")
-          + "\">"
-          + (targetAddrWarning.length() > 0 ? "<br><font color=\"red\">"
-              + targetAddrWarning + "</font>" : "")
-        + "</td>\n"
-        + "              <td><i>(Ex.: 4.3.2.1)</i></td>\n"
-        + "            </tr>\n"
-        + "            <tr>\n"
-        + "              <td align=\"right\">Target port:</td>\n"
-        + "              <td><input type=\"text\" name=\"targetport\""
-          + (targetPort.length() > 0 ? " value=\"" + targetPort + "\""
-            : "")
-          + ">"
-          + (targetPortWarning.length() > 0 ? "<br><font color=\"red\">"
-              + targetPortWarning + "</font>" : "")
-        + "</td>\n"
-        + "              <td><i>(Ex.: 80)</i></td>\n"
-        + "            </tr>\n"
-        + "            <tr>\n"
-        + "              <td></td>\n"
-        + "              <td>\n"
-        + "                <input type=\"submit\">\n"
-        + "                <input type=\"reset\">\n"
-        + "              </td>\n"
-        + "              <td></td>\n"
-        + "            </tr>\n"
-        + "          </table>\n"
-        + "        </form>\n");
-
-    if (targetIP.length() < 1) {
-      writeFooter(out);
-      try {
-        conn.close();
-        this.logger.info("Returned a database connection to the pool "
-            + "after " + (System.currentTimeMillis()
-            - requestedConnection) + " millis.");
-      } catch (SQLException e) {
-      }
-      return;
-    }
-
-    /* Parse router descriptors to check exit policies. */
-    out.println("<p>Searching the relay descriptors published by the "
-        + "relay on IP address " + relayIP + " to find out whether this "
-        + "relay permitted exiting to " + target + ". You may follow the "
-        + "links above to the relay descriptors and grep them for the "
-        + "lines printed below to confirm that results are correct.</p>");
-    SortedSet<Long> positiveConsensuses = new TreeSet<Long>();
-    Set<String> missingDescriptors = new HashSet<String>();
-    Set<String> descriptors = relevantDescriptors.keySet();
-    for (String descriptor : descriptors) {
-      byte[] rawDescriptor = null;
-      try {
-        String query = "SELECT rawdescriptor FROM descriptor "
-            + "WHERE descriptor = '" + descriptor + "'";
-        Statement statement = conn.createStatement();
-        ResultSet rs = statement.executeQuery(query);
-        if (rs.next()) {
-          rawDescriptor = rs.getBytes(1);
-        }
-        rs.close();
-        statement.close();
-      } catch (SQLException e) {
-        /* Consider this descriptors as 'missing'. */
-        continue;
-      }
-      if (rawDescriptor != null && rawDescriptor.length > 0) {
-        missingDescriptors.remove(descriptor);
-        String rawDescriptorString = new String(rawDescriptor,
-            "US-ASCII");
-        try {
-          BufferedReader br = new BufferedReader(
-              new StringReader(rawDescriptorString));
-          String line = null, routerLine = null, publishedLine = null;
-          StringBuilder acceptRejectLines = new StringBuilder();
-          boolean foundMatch = false;
-          while ((line = br.readLine()) != null) {
-            if (line.startsWith("router ")) {
-              routerLine = line;
-            } else if (line.startsWith("published ")) {
-              publishedLine = line;
-            } else if (line.startsWith("reject ") ||
-                line.startsWith("accept ")) {
-              if (foundMatch) {
-                out.println(line);
-                continue;
-              }
-              boolean ruleAccept = line.split(" ")[0].equals("accept");
-              String ruleAddress = line.split(" ")[1].split(":")[0];
-              if (!ruleAddress.equals("*")) {
-                if (!ruleAddress.contains("/") &&
-                    !ruleAddress.equals(targetIP)) {
-                  /* IP address does not match. */
-                  acceptRejectLines.append(line + "\n");
-                  continue;
-                }
-                String[] ruleIPParts = ruleAddress.split("/")[0].
-                    split("\\.");
-                int ruleNetwork = ruleAddress.contains("/") ?
-                    Integer.parseInt(ruleAddress.split("/")[1]) : 32;
-                for (int i = 0; i < 4; i++) {
-                  if (ruleNetwork == 0) {
-                    break;
-                  } else if (ruleNetwork >= 8) {
-                    if (ruleIPParts[i].equals(targetIPParts[i])) {
-                      ruleNetwork -= 8;
-                    } else {
-                      break;
-                    }
-                  } else {
-                    int mask = 255 ^ 255 >>> ruleNetwork;
-                    if ((Integer.parseInt(ruleIPParts[i]) & mask) ==
-                        (Integer.parseInt(targetIPParts[i]) & mask)) {
-                      ruleNetwork = 0;
-                    }
-                    break;
-                  }
-                }
-                if (ruleNetwork > 0) {
-                  /* IP address does not match. */
-                  acceptRejectLines.append(line + "\n");
-                  continue;
-                }
-              }
-              String rulePort = line.split(" ")[1].split(":")[1];
-              if (targetPort.length() < 1 && !ruleAccept &&
-                  !rulePort.equals("*")) {
-                /* With no port given, we only consider reject :* rules as
-                   matching. */
-                acceptRejectLines.append(line + "\n");
-                continue;
-              }
-              if (targetPort.length() > 0 && !rulePort.equals("*") &&
-                  rulePort.contains("-")) {
-                int fromPort = Integer.parseInt(rulePort.split("-")[0]);
-                int toPort = Integer.parseInt(rulePort.split("-")[1]);
-                int targetPortInt = Integer.parseInt(targetPort);
-                if (targetPortInt < fromPort ||
-                    targetPortInt > toPort) {
-                  /* Port not contained in interval. */
-                  continue;
-                }
-              }
-              if (targetPort.length() > 0) {
-                if (!rulePort.equals("*") &&
-                    !rulePort.contains("-") &&
-                    !targetPort.equals(rulePort)) {
-                  /* Ports do not match. */
-                  acceptRejectLines.append(line + "\n");
-                  continue;
-                }
-              }
-              boolean relevantMatch = false;
-              for (long match : relevantDescriptors.get(descriptor)) {
-                if (relevantConsensuses.contains(match)) {
-                  relevantMatch = true;
-                }
-              }
-              if (relevantMatch) {
-                String[] routerParts = routerLine.split(" ");
-                out.println("<pre><code>" + routerParts[0] + " "
-                    + routerParts[1] + " <b>" + routerParts[2] + "</b> "
-                    + routerParts[3] + " " + routerParts[4] + " "
-                    + routerParts[5]);
-                String[] publishedParts = publishedLine.split(" ");
-                out.println(publishedParts[0] + " <b>"
-                    + publishedParts[1] + " " + publishedParts[2]
-                    + "</b>");
-                out.print(acceptRejectLines.toString());
-                out.println("<b>" + line + "</b>");
-                foundMatch = true;
-              }
-              if (ruleAccept) {
-                positiveConsensuses.addAll(
-                    relevantDescriptors.get(descriptor));
-              }
-            }
-          }
-          br.close();
-          if (foundMatch) {
-            out.println("</code></pre>");
-          }
-        } catch (IOException e) {
-          /* Could not read descriptor string. */
-          continue;
-        }
-      }
-    }
-
-    /* Print out result. */
-    inMostRelevantConsensuses = false;
-    inOtherRelevantConsensus = false;
-    inTooOldConsensuses = false;
-    inTooNewConsensuses = false;
-    for (long match : positiveConsensuses) {
-      if (dateFormat.format(match).equals(timestampStr)) {
-        inMostRelevantConsensuses = true;
-      } else if (relevantConsensuses.contains(match)) {
-        inOtherRelevantConsensus = true;
-      } else if (tooOldConsensuses.contains(match)) {
-        inTooOldConsensuses = true;
-      } else if (tooNewConsensuses.contains(match)) {
-        inTooNewConsensuses = true;
-      }
-    }
-    if (inMostRelevantConsensuses) {
-      out.print("        <p>Result is POSITIVE with high certainty!"
-            + "</p>\n"
-          + "        <p>We found one or more relays on IP address "
-          + relayIP + " permitting exit to " + target + " in ");
-      out.print("relay list published on " + timestampStr);
-      out.print(" that clients were likely to know.</p>\n");
-      writeFooter(out);
-      try {
-        conn.close();
-        this.logger.info("Returned a database connection to the pool "
-            + "after " + (System.currentTimeMillis()
-            - requestedConnection) + " millis.");
-      } catch (SQLException e) {
-      }
-      return;
-    }
-    boolean resultIndecisive = target.length() > 0
-        && !missingDescriptors.isEmpty();
-    if (resultIndecisive) {
-      out.println("        <p>Result is INDECISIVE!</p>\n"
-          + "        <p>At least one referenced descriptor could not be "
-          + "found. This is a rare case, but one that (apparently) "
-          + "happens. We cannot make any good statement about exit "
-          + "relays without these descriptors. The following descriptors "
-          + "are missing:</p>");
-      for (String desc : missingDescriptors)
-        out.println("        <p>" + desc + "</p>\n");
-    }
-    if (inOtherRelevantConsensus) {
-      if (!resultIndecisive) {
-        out.println("        <p>Result is POSITIVE "
-            + "with moderate certainty!</p>\n");
-      }
-      out.println("<p>We found one or more relays on IP address "
-          + relayIP + " permitting exit to " + target + ", but not in ");
-      out.print("a relay list published on " + timestampStr);
-      out.print(". A possible reason for the relay being missing in a "
-          + "relay list might be that some of the directory authorities "
-          + "had difficulties connecting to the relay. However, clients "
-          + "might still have used the relay.</p>\n");
-    } else {
-      if (!resultIndecisive) {
-        out.println("        <p>Result is NEGATIVE "
-            + "with high certainty!</p>\n");
-      }
-      out.println("        <p>We did not find any relay on IP address "
-          + relayIP + " permitting exit to " + target
-          + " in the relay list 3 hours preceding " + timestampStr
-          + ".</p>\n");
-      if (inTooOldConsensuses || inTooNewConsensuses) {
-        if (inTooOldConsensuses && !inTooNewConsensuses) {
-          out.println("        <p>Note that we found a matching relay in "
-              + "relay lists that were published between 15 and 3 "
-              + "hours before " + timestampStr + ".</p>\n");
-        } else if (!inTooOldConsensuses && inTooNewConsensuses) {
-          out.println("        <p>Note that we found a matching relay in "
-              + "relay lists that were published up to 12 hours after "
-              + timestampStr + ".</p>\n");
-        } else {
-          out.println("        <p>Note that we found a matching relay in "
-              + "relay lists that were published between 15 and 3 "
-              + "hours before and in relay lists that were published up "
-              + "to 12 hours after " + timestampStr + ".</p>\n");
-        }
-        out.println("<p>Be sure to try out the previous/next day.</p>");
-      }
-    }
-    if (target != null) {
-      if (positiveConsensuses.isEmpty() &&
-          !positiveConsensusesNoTarget.isEmpty()) {
-        out.println("        <p>Note that although the found relay(s) did "
-            + "not permit exiting to " + target + ", there have been one "
-            + "or more relays running at the given time.</p>");
-      }
-    }
     try {
       conn.close();
       this.logger.info("Returned a database connection to the pool "
