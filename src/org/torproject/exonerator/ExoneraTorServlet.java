@@ -253,28 +253,17 @@ public class ExoneraTorServlet extends HttpServlet {
     /* Parse timestamp parameter. */
     String timestampParameter = request.getParameter("timestamp");
     long timestamp = 0L;
-    boolean timestampIsDate = false;
     String timestampStr = "", timestampWarning = "";
-    SimpleDateFormat shortDateTimeFormat = new SimpleDateFormat(
-        "yyyy-MM-dd HH:mm");
-    shortDateTimeFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
     dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
     if (timestampParameter != null && timestampParameter.length() > 0) {
       try {
-        if (timestampParameter.split(" ").length == 1) {
-          timestamp = dateFormat.parse(timestampParameter).getTime();
-          timestampStr = dateFormat.format(timestamp);
-          timestampIsDate = true;
-        } else {
-          timestamp = shortDateTimeFormat.parse(timestampParameter).
-              getTime();
-          timestampStr = shortDateTimeFormat.format(timestamp);
-        }
+        timestamp = dateFormat.parse(timestampParameter).getTime();
+        timestampStr = dateFormat.format(timestamp);
         if (timestamp < firstValidAfter || timestamp > lastValidAfter) {
-          timestampWarning = "Please pick a date or timestamp between \""
-              + shortDateTimeFormat.format(firstValidAfter) + "\" and \""
-              + shortDateTimeFormat.format(lastValidAfter) + "\".";
+          timestampWarning = "Please pick a date between \""
+              + dateFormat.format(firstValidAfter) + "\" and \""
+              + dateFormat.format(lastValidAfter) + "\".";
           timestamp = 0L;
         }
       } catch (ParseException e) {
@@ -284,7 +273,7 @@ public class ExoneraTorServlet extends HttpServlet {
             StringEscapeUtils.escapeHtml(timestampParameter.
             substring(0, 20)) + "[...]" :
             StringEscapeUtils.escapeHtml(timestampParameter))
-            + "\" is not a valid date or timestamp.";
+            + "\" is not a valid date.";
       }
     }
 
@@ -296,7 +285,7 @@ public class ExoneraTorServlet extends HttpServlet {
     }
     if (relayIP.length() > 0 && timestamp < 1 &&
         timestampWarning.length() < 1) {
-      timestampWarning = "Please provide a date or timestamp.";
+      timestampWarning = "Please provide a date.";
     }
 
     /* Parse target IP parameter. */
@@ -378,8 +367,7 @@ public class ExoneraTorServlet extends HttpServlet {
           + "2001:858:2:2:aabb:0:563b:1526)</i></td>\n"
         + "            </tr>\n"
         + "            <tr>\n"
-        + "              <td align=\"right\">Date or timestamp, in "
-          + "UTC:</td>\n"
+        + "              <td align=\"right\">Date:</td>\n"
         + "              <td><input type=\"text\" name=\"timestamp\""
           + " size=\"30\""
           + (timestampStr.length() > 0 ? " value=\"" + timestampStr + "\""
@@ -388,7 +376,7 @@ public class ExoneraTorServlet extends HttpServlet {
           + (timestampWarning.length() > 0 ? "<br><font color=\"red\">"
               + timestampWarning + "</font>" : "")
         + "</td>\n"
-        + "              <td><i>(Ex.: 2010-01-01 or 2010-01-01 12:00)"
+        + "              <td><i>(Ex.: 2010-01-01)"
           + "</i></td>\n"
         + "            </tr>\n"
         + "            <tr>\n"
@@ -417,22 +405,11 @@ public class ExoneraTorServlet extends HttpServlet {
     out.printf("<p>Looking up IP address %s in the relay lists "
         + "published ", relayIP);
     long timestampFrom, timestampTo;
-    if (timestampIsDate) {
-      /* If we only have a date, consider all consensuses published on the
-       * given date, plus the ones published 3 hours before the given date
-       * and until 23:59:59. */
-      timestampFrom = timestamp - 3L * 60L * 60L * 1000L;
-      timestampTo = timestamp + (24L * 60L * 60L - 1L) * 1000L;
-      out.printf("on %s", timestampStr);
-    } else {
-      /* If we have an exact timestamp, consider the consensuses published
-       * in the 3 hours preceding the UTC timestamp. */
-      timestampFrom = timestamp - 3L * 60L * 60L * 1000L;
-      timestampTo = timestamp;
-      out.printf("between %s and %s UTC",
-        shortDateTimeFormat.format(timestampFrom),
-        shortDateTimeFormat.format(timestampTo));
-    }
+    /* Consider all consensuses published on the given date, plus the ones
+     * published 3 hours before the given date and until 23:59:59. */
+    timestampFrom = timestamp - 3L * 60L * 60L * 1000L;
+    timestampTo = timestamp + (24L * 60L * 60L - 1L) * 1000L;
+    out.printf("on %s", timestampStr);
     /* If we don't find any relays in the given time interval, also look
      * at consensuses published 12 hours before and 12 hours after the
      * interval, in case the user got the "UTC" bit wrong. */
@@ -481,8 +458,8 @@ public class ExoneraTorServlet extends HttpServlet {
       out.println("        <p>No relay lists found!</p>\n"
           + "        <p>Result is INDECISIVE!</p>\n"
           + "        <p>We cannot make any statement whether there was "
-          + "a Tor relay running on IP address " + relayIP
-          + (timestampIsDate ? " on " : " at ") + timestampStr + "! We "
+          + "a Tor relay running on IP address " + relayIP + " on "
+          + timestampStr + "! We "
           + "did not find any relevant relay lists at the given time. If "
           + "you think this is an error on our side, please "
           + "<a href=\"mailto:tor-assistants@torproject.org\">contact "
@@ -701,11 +678,7 @@ public class ExoneraTorServlet extends HttpServlet {
         inTooOldConsensuses = false,
         inTooNewConsensuses = false;
     for (long match : positiveConsensusesNoTarget) {
-      if (timestampIsDate &&
-          dateFormat.format(match).equals(timestampStr)) {
-        inMostRelevantConsensuses = true;
-      } else if (!timestampIsDate &&
-          match == relevantConsensuses.last()) {
+      if (dateFormat.format(match).equals(timestampStr)) {
         inMostRelevantConsensuses = true;
       } else if (relevantConsensuses.contains(match)) {
         inOtherRelevantConsensus = true;
@@ -720,11 +693,7 @@ public class ExoneraTorServlet extends HttpServlet {
             + "</p>\n"
           + "        <p>We found one or more relays on IP address "
           + relayIP + " in ");
-      if (timestampIsDate) {
-        out.print("relay list published on " + timestampStr);
-      } else {
-        out.print("the most recent relay list preceding " + timestampStr);
-      }
+      out.print("relay list published on " + timestampStr);
       out.print(" that clients were likely to know.</p>\n");
     } else {
       if (inOtherRelevantConsensus) {
@@ -732,12 +701,7 @@ public class ExoneraTorServlet extends HttpServlet {
             + "with moderate certainty!</p>\n");
         out.println("<p>We found one or more relays on IP address "
             + relayIP + ", but not in ");
-        if (timestampIsDate) {
-          out.print("a relay list published on " + timestampStr);
-        } else {
-          out.print("the most recent relay list preceding "
-              + timestampStr);
-        }
+        out.print("a relay list published on " + timestampStr);
         out.print(". A possible reason for the relay being missing in a "
             + "relay list might be that some of the directory "
             + "authorities had difficulties connecting to the relay. "
@@ -764,14 +728,7 @@ public class ExoneraTorServlet extends HttpServlet {
                 + "hours before and in relay lists that were published "
                 + "up to 12 hours after " + timestampStr + ".</p>\n");
           }
-          if (timestampIsDate) {
-            out.println("<p>Be sure to try out the previous/next day or "
-                + "provide an exact timestamp in UTC.</p>");
-          } else {
-            out.println("<p>Make sure that the timestamp you "
-                + "provided is correctly converted to the UTC "
-                + "timezone.</p>");
-          }
+          out.println("<p>Be sure to try out the previous/next day.</p>");
         }
         /* We didn't find any descriptor.  No need to look up targets. */
         writeFooter(out);
@@ -1000,10 +957,7 @@ public class ExoneraTorServlet extends HttpServlet {
     inTooOldConsensuses = false;
     inTooNewConsensuses = false;
     for (long match : positiveConsensuses) {
-      if (timestampIsDate &&
-          dateFormat.format(match).equals(timestampStr)) {
-        inMostRelevantConsensuses = true;
-      } else if (!timestampIsDate && match == relevantConsensuses.last()) {
+      if (dateFormat.format(match).equals(timestampStr)) {
         inMostRelevantConsensuses = true;
       } else if (relevantConsensuses.contains(match)) {
         inOtherRelevantConsensus = true;
@@ -1018,11 +972,7 @@ public class ExoneraTorServlet extends HttpServlet {
             + "</p>\n"
           + "        <p>We found one or more relays on IP address "
           + relayIP + " permitting exit to " + target + " in ");
-      if (timestampIsDate) {
-        out.print("relay list published on " + timestampStr);
-      } else {
-        out.print("the most recent relay list preceding " + timestampStr);
-      }
+      out.print("relay list published on " + timestampStr);
       out.print(" that clients were likely to know.</p>\n");
       writeFooter(out);
       try {
@@ -1053,11 +1003,7 @@ public class ExoneraTorServlet extends HttpServlet {
       }
       out.println("<p>We found one or more relays on IP address "
           + relayIP + " permitting exit to " + target + ", but not in ");
-      if (timestampIsDate) {
-        out.print("a relay list published on " + timestampStr);
-      } else {
-        out.print("the most recent relay list preceding " + timestampStr);
-      }
+      out.print("a relay list published on " + timestampStr);
       out.print(". A possible reason for the relay being missing in a "
           + "relay list might be that some of the directory authorities "
           + "had difficulties connecting to the relay. However, clients "
@@ -1086,13 +1032,7 @@ public class ExoneraTorServlet extends HttpServlet {
               + "hours before and in relay lists that were published up "
               + "to 12 hours after " + timestampStr + ".</p>\n");
         }
-        if (timestampIsDate) {
-          out.println("<p>Be sure to try out the previous/next day or "
-              + "provide an exact timestamp in UTC.</p>");
-        } else {
-          out.println("<p>Make sure that the timestamp you provided is "
-              + "correctly converted to the UTC timezone.</p>");
-        }
+        out.println("<p>Be sure to try out the previous/next day.</p>");
       }
     }
     if (target != null) {
