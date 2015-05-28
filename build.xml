@@ -11,6 +11,9 @@
   <property name="warfile" value="exonerator.war"/>
   <path id="classpath">
     <pathelement path="${classes}"/>
+    <fileset dir="deps/metrics-lib">
+      <include name="descriptor.jar"/>
+    </fileset>
     <fileset dir="/usr/share/java">
       <include name="commons-codec.jar"/>
       <include name="postgresql-jdbc3.jar"/>
@@ -25,8 +28,12 @@
     <mkdir dir="${classes}"/>
   </target>
 
+  <target name="metrics-lib">
+    <ant dir="deps/metrics-lib"/>
+  </target>
+
   <!-- Compile all servlets and plain Java classes. -->
-  <target name="compile" depends="init">
+  <target name="compile" depends="metrics-lib, init">
     <javac destdir="${classes}"
            srcdir="${sources}"
            source="1.5"

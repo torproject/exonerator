@@ -32,6 +32,8 @@ import java.util.TimeZone;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.codec.digest.DigestUtils;
+import org.torproject.descriptor.DescriptorCollector;
+import org.torproject.descriptor.DescriptorSourceFactory;
 
 /* Import Tor descriptors into the ExoneraTor database. */
 public class ExoneraTorDatabaseImporter {
@@ -42,6 +44,7 @@ public class ExoneraTorDatabaseImporter {
     openDatabaseConnection();
     prepareDatabaseStatements();
     createLockFile();
+    fetchDescriptors();
     readImportHistoryToMemory();
     parseDescriptors();
     writeImportHistoryToDisk();
@@ -148,6 +151,16 @@ public class ExoneraTorDatabaseImporter {
           + "Exiting.");
       System.exit(1);
     }
+  }
+
+  /* Fetch recent descriptors from CollecTor. */
+  private static void fetchDescriptors() {
+    DescriptorCollector collector =
+        DescriptorSourceFactory.createDescriptorCollector();
+    collector.collectDescriptors("https://collector.torproject.org",
+        new String[] { "/recent/relay-descriptors/consensuses/",
+        "/recent/relay-descriptors/server-descriptors/",
+        "/recent/exit-lists/" }, 0L, new File(importDirString), true);
   }
 
   /* Last and next parse histories containing paths of parsed files and
