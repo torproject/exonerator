@@ -338,16 +338,11 @@ public class ExoneraTorServlet extends HttpServlet {
     out.printf("<p>Looking up IP address %s in the relay lists "
         + "published ", relayIP);
     long timestampFrom, timestampTo;
-    /* Consider all consensuses published on the given date, plus the ones
-     * published 3 hours before the given date and until 23:59:59. */
-    timestampFrom = timestamp - 3L * 60L * 60L * 1000L;
-    timestampTo = timestamp + (24L * 60L * 60L - 1L) * 1000L;
-    out.printf("on %s", timestampStr);
-    /* If we don't find any relays in the given time interval, also look
-     * at consensuses published 12 hours before and 12 hours after the
-     * interval, in case the user got the "UTC" bit wrong. */
-    long timestampTooOld = timestampFrom - 12L * 60L * 60L * 1000L;
-    long timestampTooNew = timestampTo + 12L * 60L * 60L * 1000L;
+    /* Consider all consensuses published on or within a day of the given
+     * date. */
+    timestampFrom = timestamp - 24L * 60L * 60L * 1000L;
+    timestampTo = timestamp + 2 * 24L * 60L * 60L * 1000L - 1L;
+    out.printf("on or within a day of %s", timestampStr);
     out.print(" as well as in the relevant exit lists. Clients could "
         + "have selected any of these relays to build circuits. "
         + "You may follow the links to relay lists and relay descriptors "
@@ -356,11 +351,9 @@ public class ExoneraTorServlet extends HttpServlet {
     SimpleDateFormat validAfterTimeFormat = new SimpleDateFormat(
         "yyyy-MM-dd HH:mm:ss");
     validAfterTimeFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-    String fromValidAfter = validAfterTimeFormat.format(timestampTooOld);
-    String toValidAfter = validAfterTimeFormat.format(timestampTooNew);
-    SortedSet<Long> tooOldConsensuses = new TreeSet<Long>();
+    String fromValidAfter = validAfterTimeFormat.format(timestampFrom);
+    String toValidAfter = validAfterTimeFormat.format(timestampTo);
     SortedSet<Long> relevantConsensuses = new TreeSet<Long>();
-    SortedSet<Long> tooNewConsensuses = new TreeSet<Long>();
     try {
       Statement statement = conn.createStatement();
       String query = "SELECT validafter FROM consensus "
@@ -369,13 +362,7 @@ public class ExoneraTorServlet extends HttpServlet {
       ResultSet rs = statement.executeQuery(query);
       while (rs.next()) {
         long consensusTime = rs.getTimestamp(1).getTime();
-        if (consensusTime < timestampFrom) {
-          tooOldConsensuses.add(consensusTime);
-        } else if (consensusTime > timestampTo) {
-          tooNewConsensuses.add(consensusTime);
-        } else {
-          relevantConsensuses.add(consensusTime);
-        }
+        relevantConsensuses.add(consensusTime);
       }
       rs.close();
       statement.close();
@@ -383,17 +370,14 @@ public class ExoneraTorServlet extends HttpServlet {
       /* Looks like we don't have any consensuses in the requested
        * interval. */
     }
-    SortedSet<Long> allConsensuses = new TreeSet<Long>();
-    allConsensuses.addAll(tooOldConsensuses);
-    allConsensuses.addAll(relevantConsensuses);
-    allConsensuses.addAll(tooNewConsensuses);
-    if (allConsensuses.isEmpty()) {
+    if (relevantConsensuses.isEmpty()) {
       out.println("        <p>No relay lists found!</p>\n"
           + "        <p>Result is INDECISIVE!</p>\n"
           + "        <p>We cannot make any statement whether there was "
           + "a Tor relay running on IP address " + relayIP + " on "
           + timestampStr + "! We "
-          + "did not find any relevant relay lists at the given time. If "
+          + "did not find any relevant relay lists on or within a day of "
+          + "the given date. If "
           + "you think this is an error on our side, please "
           + "<a href=\"mailto:tor-assistants@torproject.org\">contact "
           + "us</a>!</p>\n");
@@ -473,23 +457,20 @@ public class ExoneraTorServlet extends HttpServlet {
         "yyyy-MM-dd-HH-mm-ss");
     validAfterUrlFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
     out.print("<pre><code>");
-    for (long consensus : allConsensuses) {
-      if (relevantConsensuses.contains(consensus)) {
-        String validAfterDatetime = validAfterTimeFormat.format(
-            consensus);
-        String validAfterString = validAfterUrlFormat.format(consensus);
-        out.print("valid-after <b>"
-            + "<a href=\"consensus?valid-after="
-            + validAfterString + "\" target=\"_blank\">"
-            + validAfterDatetime + "</b></a>\n");
-        if (statusEntries.containsKey(consensus)) {
-          for (String htmlString :
-              statusEntries.get(consensus).values()) {
-            out.print(htmlString);
-          }
+    for (long consensus : relevantConsensuses) {
+      String validAfterDatetime = validAfterTimeFormat.format(consensus);
+      String validAfterString = validAfterUrlFormat.format(consensus);
+      out.print("valid-after <b>"
+          + "<a href=\"consensus?valid-after="
+          + validAfterString + "\" target=\"_blank\">"
+          + validAfterDatetime + "</b></a>\n");
+      if (statusEntries.containsKey(consensus)) {
+        for (String htmlString :
+            statusEntries.get(consensus).values()) {
+          out.print(htmlString);
         }
-        out.print("\n");
       }
+      out.print("\n");
     }
     out.print("</code></pre>");
     if (relevantDescriptors.isEmpty()) {
@@ -497,9 +478,8 @@ public class ExoneraTorServlet extends HttpServlet {
           + "        <p>Result is NEGATIVE with high certainty!</p>\n"
           + "        <p>We did not find IP "
           + "address " + relayIP + " in any of the relay or exit lists "
-          + "that were published between %s and %s.</p>\n",
-          dateFormat.format(timestampTooOld),
-          dateFormat.format(timestampTooNew));
+          + "that were published on or within a day of %s.</p>\n",
+          timestampStr);
       /* Run another query to find out if there are relays running on
        * other IP addresses in the same /24 or /48 network and tell the
        * user about it. */
@@ -580,12 +560,14 @@ public class ExoneraTorServlet extends HttpServlet {
         if (!relayIP.contains(":")) {
           out.print("        <p>The following other IP addresses of Tor "
               + "relays in the same /24 network were found in relay "
-              + "and/or exit lists around the time that could be related "
+              + "and/or exit lists on or within a day of " + timestampStr
+              + " that could be related "
               + "to IP address " + relayIP + ":</p>\n");
         } else {
           out.print("        <p>The following other IP addresses of Tor "
               + "relays in the same /48 network were found in relay "
-              + "lists around the time that could be related to IP "
+              + "lists on or within a day of " + timestampStr
+              + " that could be related to IP "
               + "address " + relayIP + ":</p>\n");
         }
         out.print("        <ul>\n");
@@ -606,64 +588,21 @@ public class ExoneraTorServlet extends HttpServlet {
     }
 
     /* Print out result. */
-    boolean inMostRelevantConsensuses = false,
-        inOtherRelevantConsensus = false,
-        inTooOldConsensuses = false,
-        inTooNewConsensuses = false;
-    for (long match : positiveConsensusesNoTarget) {
-      if (dateFormat.format(match).equals(timestampStr)) {
-        inMostRelevantConsensuses = true;
-      } else if (relevantConsensuses.contains(match)) {
-        inOtherRelevantConsensus = true;
-      } else if (tooOldConsensuses.contains(match)) {
-        inTooOldConsensuses = true;
-      } else if (tooNewConsensuses.contains(match)) {
-        inTooNewConsensuses = true;
-      }
-    }
-    if (inMostRelevantConsensuses) {
+    if (!positiveConsensusesNoTarget.isEmpty()) {
       out.print("        <p>Result is POSITIVE with high certainty!"
             + "</p>\n"
           + "        <p>We found one or more relays on IP address "
-          + relayIP + " in ");
-      out.print("relay list published on " + timestampStr);
+          + relayIP + " in a ");
+      out.print("relay list published on or within a day of "
+          + timestampStr);
       out.print(" that clients were likely to know.</p>\n");
     } else {
-      if (inOtherRelevantConsensus) {
-        out.println("        <p>Result is POSITIVE "
-            + "with moderate certainty!</p>\n");
-        out.println("<p>We found one or more relays on IP address "
-            + relayIP + ", but not in ");
-        out.print("a relay list published on " + timestampStr);
-        out.print(". A possible reason for the relay being missing in a "
-            + "relay list might be that some of the directory "
-            + "authorities had difficulties connecting to the relay. "
-            + "However, clients might still have used the relay.</p>\n");
-      } else {
-        out.println("        <p>Result is NEGATIVE "
-            + "with high certainty!</p>\n");
-        out.println("        <p>We did not find any relay on IP address "
-            + relayIP
-            + " in the relay lists 3 hours preceding " + timestampStr
-            + ".</p>\n");
-        if (inTooOldConsensuses || inTooNewConsensuses) {
-          if (inTooOldConsensuses && !inTooNewConsensuses) {
-            out.println("        <p>Note that we found a matching relay "
-                + "in relay lists that were published between 15 and 3 "
-                + "hours before " + timestampStr + ".</p>\n");
-          } else if (!inTooOldConsensuses && inTooNewConsensuses) {
-            out.println("        <p>Note that we found a matching relay "
-                + "in relay lists that were published up to 12 hours "
-                + "after " + timestampStr + ".</p>\n");
-          } else {
-            out.println("        <p>Note that we found a matching relay "
-                + "in relay lists that were published between 15 and 3 "
-                + "hours before and in relay lists that were published "
-                + "up to 12 hours after " + timestampStr + ".</p>\n");
-          }
-          out.println("<p>Be sure to try out the previous/next day.</p>");
-        }
-      }
+      out.println("        <p>Result is NEGATIVE "
+          + "with high certainty!</p>\n");
+      out.println("        <p>We did not find any relay on IP address "
+          + relayIP
+          + " in the relay lists on or within a day of " + timestampStr
+          + ".</p>\n");
     }
 
     try {
