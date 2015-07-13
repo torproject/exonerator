@@ -1,4 +1,4 @@
-/* Copyright 2011, 2012 The Tor Project
+/* Copyright 2011--2015 The Tor Project
  * See LICENSE for licensing information */
 package org.torproject.exonerator;
 
@@ -56,78 +56,13 @@ public class ExoneraTorServlet extends HttpServlet {
     }
   }
 
-  private void writeHeader(PrintWriter out) throws IOException {
-    out.println("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 "
-          + "Transitional//EN\">\n"
-        + "<html>\n"
-        + "  <head>\n"
-        + "    <title>ExoneraTor</title>\n"
-        + "    <meta http-equiv=\"content-type\" content=\"text/html; "
-          + "charset=ISO-8859-1\">\n"
-        + "    <link href=\"/css/stylesheet-ltr.css\" type=\"text/css\" "
-          + "rel=\"stylesheet\">\n"
-        + "    <link href=\"/images/favicon.ico\" "
-          + "type=\"image/x-icon\" rel=\"shortcut icon\">\n"
-        + "  </head>\n"
-        + "  <body>\n"
-        + "    <div class=\"center\">\n"
-        + "      <div class=\"main-column\" style=\"margin:5; "
-          + "Padding:0;\">\n"
-        + "        <h2>ExoneraTor</h2>\n"
-        + "        <h3>or: a website that tells you whether a given IP "
-          + "address was a Tor relay</h3>\n"
-        + "        <br>\n"
-        + "        <p>Just because you see an Internet connection from a "
-          + "particular IP address does not mean you know <i>who</i> "
-          + "originated the traffic. Tor anonymizes Internet traffic by "
-          + "\"<a href=\"https://www.torproject.org/about/overview"
-          + "#thesolution\">onion routing</a>,\" sending packets "
-          + "through a series of encrypted hops before they reach their "
-          + "destination. Therefore, if you see traffic from a Tor node, "
-          + "you may be seeing traffic that originated from someone "
-          + "using Tor, rather than from the node operator itself. The "
-          + "Tor Project and Tor node operators have no records of the "
-          + "traffic that passes over the network, but we do maintain "
-          + "current and historical records of which IP addresses are "
-          + "part of the Tor network.</p>\n"
-        + "        <br>\n"
-        + "        <p>ExoneraTor tells you whether there was a Tor relay "
-          + "running on a given IP address at a given time. ExoneraTor "
-          + "learns these facts by parsing the public relay lists that "
-          + "are collected from the Tor directory authorities and the "
-          + "exit lists collected by TorDNSEL. By inputting an IP "
-          + "address and time, you can determine whether that IP was "
-          + "then a part of the Tor network.</p>\n"
-        + "        <br>\n"
-        + "        <p><font color=\"red\"><b>Notice:</b> Note that the "
-          + "information you are providing below may be visible to "
-          + "anyone who can read the network traffic between you and "
-          + "this web server or who has access to this web "
-          + "server.</font></p>\n"
-        + "        <br>\n");
-  }
-
-  private void writeFooter(PrintWriter out) throws IOException {
-    out.println("        <br>\n"
-        + "      </div>\n"
-        + "    </div>\n"
-        + "    <div class=\"bottom\" id=\"bottom\">\n"
-        + "      <p>\"Tor\" and the \"Onion Logo\" are <a "
-          + "href=\"https://www.torproject.org/docs/trademark-faq.html.en"
-          + "\">registered trademarks</a> of The Tor Project, Inc.</p>\n"
-        + "    </div>\n"
-        + "  </body>\n"
-        + "</html>");
-    out.close();
-  }
-
   public void doGet(HttpServletRequest request,
       HttpServletResponse response) throws IOException,
       ServletException {
 
     /* Start writing response. */
     PrintWriter out = response.getWriter();
-    writeHeader(out);
+    this.writeHeader(out);
 
     /* Open a database connection that we'll use to handle the whole
      * request. */
@@ -136,11 +71,8 @@ public class ExoneraTorServlet extends HttpServlet {
     try {
       conn = this.ds.getConnection();
     } catch (SQLException e) {
-      out.println("<p><font color=\"red\"><b>Warning: </b></font>Unable "
-          + "to connect to the database. If this problem persists, "
-          + "please <a href=\"mailto:tor-assistants@torproject.org\">let "
-          + "us know</a>!</p>\n");
-      writeFooter(out);
+      this.writeUnableToConnectToDatabaseWarning(out);
+      this.writeFooter(out);
       return;
     }
 
@@ -163,12 +95,8 @@ public class ExoneraTorServlet extends HttpServlet {
       /* Looks like we don't have any consensuses. */
     }
     if (firstValidAfter < 0L || lastValidAfter < 0L) {
-      out.println("<p><font color=\"red\"><b>Warning: </b></font>This "
-          + "server doesn't have any relay lists available. If this "
-          + "problem persists, please "
-          + "<a href=\"mailto:tor-assistants@lists.torproject.org\">let "
-          + "us know</a>!</p>\n");
-      writeFooter(out);
+      this.writeNoDataWarning(out);
+      this.writeFooter(out);
       try {
         conn.close();
         this.logger.info("Returned a database connection to the pool "
@@ -178,9 +106,6 @@ public class ExoneraTorServlet extends HttpServlet {
       }
       return;
     }
-
-    out.println("<a name=\"relay\"></a><h3>Was there a Tor relay running "
-        + "on this IP address?</h3>");
 
     /* Parse IP parameter. */
     Pattern ipv4AddressPattern = Pattern.compile(
@@ -283,47 +208,11 @@ public class ExoneraTorServlet extends HttpServlet {
     }
 
     /* Write form with IP address and timestamp. */
-    out.println("        <form action=\"#relay\">\n"
-        + "          <table>\n"
-        + "            <tr>\n"
-        + "              <td align=\"right\">IP address in question:"
-          + "</td>\n"
-        + "              <td><input type=\"text\" name=\"ip\" size=\"30\""
-          + (relayIP.length() > 0 ? " value=\"" + relayIP + "\""
-            : "")
-          + ">"
-          + (ipWarning.length() > 0 ? "<br><font color=\"red\">"
-          + ipWarning + "</font>" : "")
-        + "</td>\n"
-        + "              <td><i>(Ex.: 86.59.21.38 or "
-          + "2001:858:2:2:aabb:0:563b:1526)</i></td>\n"
-        + "            </tr>\n"
-        + "            <tr>\n"
-        + "              <td align=\"right\">Date:</td>\n"
-        + "              <td><input type=\"text\" name=\"timestamp\""
-          + " size=\"30\""
-          + (timestampStr.length() > 0 ? " value=\"" + timestampStr + "\""
-            : "")
-          + ">"
-          + (timestampWarning.length() > 0 ? "<br><font color=\"red\">"
-              + timestampWarning + "</font>" : "")
-        + "</td>\n"
-        + "              <td><i>(Ex.: 2010-01-01)"
-          + "</i></td>\n"
-        + "            </tr>\n"
-        + "            <tr>\n"
-        + "              <td></td>\n"
-        + "              <td>\n"
-        + "                <input type=\"submit\">\n"
-        + "                <input type=\"reset\">\n"
-        + "              </td>\n"
-        + "              <td></td>\n"
-        + "            </tr>\n"
-        + "          </table>\n"
-        + "        </form>\n");
+    this.writeForm(out, relayIP, ipWarning, timestampStr,
+        timestampWarning);
 
     if (relayIP.length() < 1 || timestamp < 1) {
-      writeFooter(out);
+      this.writeFooter(out);
       try {
         conn.close();
         this.logger.info("Returned a database connection to the pool "
@@ -334,19 +223,12 @@ public class ExoneraTorServlet extends HttpServlet {
       return;
     }
 
-    out.printf("<p>Looking up IP address %s in the relay lists "
-        + "published ", relayIP);
     long timestampFrom, timestampTo;
     /* Consider all consensuses published on or within a day of the given
      * date. */
     timestampFrom = timestamp - 24L * 60L * 60L * 1000L;
     timestampTo = timestamp + 2 * 24L * 60L * 60L * 1000L - 1L;
-    out.printf("on or within a day of %s", timestampStr);
-    out.print(" as well as in the relevant exit lists. Clients could "
-        + "have selected any of these relays to build circuits. "
-        + "You may follow the links to relay lists and relay descriptors "
-        + "to grep for the lines printed below and confirm that results "
-        + "are correct.<br>\n");
+    this.writeSearchInfos(out, relayIP, timestampStr);
     SimpleDateFormat validAfterTimeFormat = new SimpleDateFormat(
         "yyyy-MM-dd HH:mm:ss");
     validAfterTimeFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -370,17 +252,8 @@ public class ExoneraTorServlet extends HttpServlet {
        * interval. */
     }
     if (relevantConsensuses.isEmpty()) {
-      out.println("        <p>No relay lists found!</p>\n"
-          + "        <p>Result is INDECISIVE!</p>\n"
-          + "        <p>We cannot make any statement whether there was "
-          + "a Tor relay running on IP address " + relayIP + " on "
-          + timestampStr + "! We "
-          + "did not find any relevant relay lists on or within a day of "
-          + "the given date. If "
-          + "you think this is an error on our side, please "
-          + "<a href=\"mailto:tor-assistants@torproject.org\">contact "
-          + "us</a>!</p>\n");
-      writeFooter(out);
+      this.writeNoDataForThisInterval(out, relayIP, timestampStr);
+      this.writeFooter(out);
       try {
         conn.close();
         this.logger.info("Returned a database connection to the pool "
@@ -394,7 +267,7 @@ public class ExoneraTorServlet extends HttpServlet {
     /* Search for status entries with the given IP address as onion
      * routing address, plus status entries of relays having an exit list
      * entry with the given IP address as exit address. */
-    SortedSet<String> tableRows = new TreeSet<String>();
+    List<String[]> tableRows = new ArrayList<String[]>();
     try {
       CallableStatement cs = conn.prepareCall(
           "{call search_statusentries_by_address_date(?, ?)}");
@@ -408,7 +281,7 @@ public class ExoneraTorServlet extends HttpServlet {
         SortedSet<String> addresses = new TreeSet<String>();
         long validafter = rs.getTimestamp(3, utcCalendar).getTime();
         String validAfterString = validAfterTimeFormat.format(validafter);
-        String fingerprint = rs.getString(4);
+        String fingerprint = rs.getString(4).toUpperCase();
         String nickname = "(Unknown)";
         String exit = "Unknown";
         for (String line : new String(rawstatusentry).split("\n")) {
@@ -428,15 +301,14 @@ public class ExoneraTorServlet extends HttpServlet {
         if (exitaddress != null && exitaddress.length() > 0) {
           addresses.add(exitaddress);
         }
-        StringBuilder html = new StringBuilder();
-        html.append("<tr><td>" + validAfterString + "</td><td>");
+        StringBuilder sb = new StringBuilder();
         int writtenAddresses = 0;
         for (String address : addresses) {
-          html.append((writtenAddresses++ > 0 ? ", " : "") + address);
+          sb.append((writtenAddresses++ > 0 ? ", " : "") + address);
         }
-        html.append("</td><td>" + fingerprint.toUpperCase() + "</td><td>"
-            + nickname + "</td><td>" + exit + "</td></tr>\n");
-        tableRows.add(html.toString());
+        String[] tableRow = new String[] { validAfterString,
+            sb.toString(), fingerprint, nickname, exit };
+        tableRows.add(tableRow);
       }
       rs.close();
       cs.close();
@@ -446,26 +318,8 @@ public class ExoneraTorServlet extends HttpServlet {
 
     /* Print out what we found. */
     if (!tableRows.isEmpty()) {
-      out.print("<br>\n");
-      out.print("<table>\n");
-      out.print("<thead>\n");
-      out.print("<tr><th>Timestamp (UTC)</th><th>IP address(es)</th>"
-          + "<th>Identity fingerprint</th><th>Nickname</th><th>Exit</th>"
-          + "</tr>\n");
-      out.print("</thead>\n");
-      out.print("<tbody>\n");
-      for (String tableRow : tableRows) {
-        out.print(tableRow);
-      }
-      out.print("</tbody>\n");
-      out.print("</table>\n");
+      this.writeResultsTable(out, tableRows);
     } else {
-      out.printf("        <p>None found!</p>\n"
-          + "        <p>Result is NEGATIVE with high certainty!</p>\n"
-          + "        <p>We did not find IP "
-          + "address " + relayIP + " in any of the relay or exit lists "
-          + "that were published on or within a day of %s.</p>\n",
-          timestampStr);
       /* Run another query to find out if there are relays running on
        * other IP addresses in the same /24 or /48 network and tell the
        * user about it. */
@@ -542,27 +396,13 @@ public class ExoneraTorServlet extends HttpServlet {
           }
         }
       }
-      if (!addressesInSameNetwork.isEmpty()) {
-        if (!relayIP.contains(":")) {
-          out.print("        <p>The following other IP addresses of Tor "
-              + "relays in the same /24 network were found in relay "
-              + "and/or exit lists on or within a day of " + timestampStr
-              + " that could be related "
-              + "to IP address " + relayIP + ":</p>\n");
-        } else {
-          out.print("        <p>The following other IP addresses of Tor "
-              + "relays in the same /48 network were found in relay "
-              + "lists on or within a day of " + timestampStr
-              + " that could be related to IP "
-              + "address " + relayIP + ":</p>\n");
-        }
-        out.print("        <ul>\n");
-        for (String s : addressesInSameNetwork) {
-          out.print("        <li>" + s + "</li>\n");
-        }
-        out.print("        </ul>\n");
+      if (addressesInSameNetwork.isEmpty()) {
+        this.writeNoneFound(out, relayIP, timestampStr);
+      } else {
+        this.writeAddressesInSameNetwork(out, relayIP, timestampStr,
+            addressesInSameNetwork);
       }
-      writeFooter(out);
+      this.writeFooter(out);
       try {
         conn.close();
         this.logger.info("Returned a database connection to the pool "
@@ -575,20 +415,9 @@ public class ExoneraTorServlet extends HttpServlet {
 
     /* Print out result. */
     if (!tableRows.isEmpty()) {
-      out.print("        <p>Result is POSITIVE with high certainty!"
-            + "</p>\n"
-          + "        <p>We found one or more relays on IP address "
-          + relayIP + " in a ");
-      out.print("relay list published on or within a day of "
-          + timestampStr);
-      out.print(" that clients were likely to know.</p>\n");
+      this.writeSummaryPositive(out, relayIP, timestampStr);
     } else {
-      out.println("        <p>Result is NEGATIVE "
-          + "with high certainty!</p>\n");
-      out.println("        <p>We did not find any relay on IP address "
-          + relayIP
-          + " in the relay lists on or within a day of " + timestampStr
-          + ".</p>\n");
+      this.writeSummaryNegative(out, relayIP, timestampStr);
     }
 
     try {
@@ -598,7 +427,242 @@ public class ExoneraTorServlet extends HttpServlet {
           - requestedConnection) + " millis.");
     } catch (SQLException e) {
     }
-    writeFooter(out);
+    this.writeFooter(out);
+  }
+
+  /* Helper methods for writing the response. */
+
+  private void writeHeader(PrintWriter out) throws IOException {
+    out.println("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 "
+          + "Transitional//EN\">\n"
+        + "<html>\n"
+        + "  <head>\n"
+        + "    <title>ExoneraTor</title>\n"
+        + "    <meta http-equiv=\"content-type\" content=\"text/html; "
+          + "charset=ISO-8859-1\">\n"
+        + "    <link href=\"/css/stylesheet-ltr.css\" type=\"text/css\" "
+          + "rel=\"stylesheet\">\n"
+        + "    <link href=\"/images/favicon.ico\" "
+          + "type=\"image/x-icon\" rel=\"shortcut icon\">\n"
+        + "  </head>\n"
+        + "  <body>\n"
+        + "    <div class=\"center\">\n"
+        + "      <div class=\"main-column\" style=\"margin:5; "
+          + "Padding:0;\">\n"
+        + "        <h2>ExoneraTor</h2>\n"
+        + "        <h3>or: a website that tells you whether a given IP "
+          + "address was a Tor relay</h3>\n"
+        + "        <br>\n"
+        + "        <p>Just because you see an Internet connection from a "
+          + "particular IP address does not mean you know <i>who</i> "
+          + "originated the traffic. Tor anonymizes Internet traffic by "
+          + "\"<a href=\"https://www.torproject.org/about/overview"
+          + "#thesolution\">onion routing</a>,\" sending packets "
+          + "through a series of encrypted hops before they reach their "
+          + "destination. Therefore, if you see traffic from a Tor node, "
+          + "you may be seeing traffic that originated from someone "
+          + "using Tor, rather than from the node operator itself. The "
+          + "Tor Project and Tor node operators have no records of the "
+          + "traffic that passes over the network, but we do maintain "
+          + "current and historical records of which IP addresses are "
+          + "part of the Tor network.</p>\n"
+        + "        <br>\n"
+        + "        <p>ExoneraTor tells you whether there was a Tor relay "
+          + "running on a given IP address at a given time. ExoneraTor "
+          + "learns these facts by parsing the public relay lists that "
+          + "are collected from the Tor directory authorities and the "
+          + "exit lists collected by TorDNSEL. By inputting an IP "
+          + "address and time, you can determine whether that IP was "
+          + "then a part of the Tor network.</p>\n"
+        + "        <br>\n"
+        + "        <p><font color=\"red\"><b>Notice:</b> Note that the "
+          + "information you are providing below may be visible to "
+          + "anyone who can read the network traffic between you and "
+          + "this web server or who has access to this web "
+          + "server.</font></p>\n"
+        + "        <br>\n");
+  }
+
+  private void writeUnableToConnectToDatabaseWarning(PrintWriter out)
+      throws IOException {
+    out.println("<p><font color=\"red\"><b>Warning: </b></font>Unable "
+        + "to connect to the database. If this problem persists, "
+        + "please <a href=\"mailto:tor-assistants@torproject.org\">let "
+        + "us know</a>!</p>\n");
+  }
+
+  private void writeNoDataWarning(PrintWriter out) throws IOException {
+    out.println("<p><font color=\"red\"><b>Warning: </b></font>This "
+        + "server doesn't have any relay lists available. If this "
+        + "problem persists, please "
+        + "<a href=\"mailto:tor-assistants@lists.torproject.org\">let "
+        + "us know</a>!</p>\n");
+  }
+
+  private void writeForm(PrintWriter out, String relayIP,
+      String ipWarning, String timestampStr, String timestampWarning)
+      throws IOException {
+    out.println("<a name=\"relay\"></a><h3>Was there a Tor relay running "
+        + "on this IP address?</h3>");
+    out.println("        <form action=\"#relay\">\n"
+        + "          <table>\n"
+        + "            <tr>\n"
+        + "              <td align=\"right\">IP address in question:"
+          + "</td>\n"
+        + "              <td><input type=\"text\" name=\"ip\" size=\"30\""
+          + (relayIP.length() > 0 ? " value=\"" + relayIP + "\""
+            : "")
+          + ">"
+          + (ipWarning.length() > 0 ? "<br><font color=\"red\">"
+          + ipWarning + "</font>" : "")
+        + "</td>\n"
+        + "              <td><i>(Ex.: 86.59.21.38 or "
+          + "2001:858:2:2:aabb:0:563b:1526)</i></td>\n"
+        + "            </tr>\n"
+        + "            <tr>\n"
+        + "              <td align=\"right\">Date:</td>\n"
+        + "              <td><input type=\"text\" name=\"timestamp\""
+          + " size=\"30\""
+          + (timestampStr.length() > 0 ? " value=\"" + timestampStr + "\""
+            : "")
+          + ">"
+          + (timestampWarning.length() > 0 ? "<br><font color=\"red\">"
+              + timestampWarning + "</font>" : "")
+        + "</td>\n"
+        + "              <td><i>(Ex.: 2010-01-01)"
+          + "</i></td>\n"
+        + "            </tr>\n"
+        + "            <tr>\n"
+        + "              <td></td>\n"
+        + "              <td>\n"
+        + "                <input type=\"submit\">\n"
+        + "                <input type=\"reset\">\n"
+        + "              </td>\n"
+        + "              <td></td>\n"
+        + "            </tr>\n"
+        + "          </table>\n"
+        + "        </form>\n");
+  }
+
+  private void writeSearchInfos(PrintWriter out, String relayIP,
+      String timestampStr) throws IOException {
+    out.printf("<p>Looking up IP address %s in the relay lists "
+        + "published ", relayIP);
+    out.printf("on or within a day of %s", timestampStr);
+    out.print(" as well as in the relevant exit lists. Clients could "
+        + "have selected any of these relays to build circuits. "
+        + "You may follow the links to relay lists and relay descriptors "
+        + "to grep for the lines printed below and confirm that results "
+        + "are correct.<br>\n");
+  }
+
+  private void writeNoDataForThisInterval(PrintWriter out, String relayIP,
+      String timestampStr) throws IOException {
+    out.println("        <p>No relay lists found!</p>\n"
+        + "        <p>Result is INDECISIVE!</p>\n"
+        + "        <p>We cannot make any statement whether there was "
+        + "a Tor relay running on IP address " + relayIP + " on "
+        + timestampStr + "! We "
+        + "did not find any relevant relay lists on or within a day of "
+        + "the given date. If "
+        + "you think this is an error on our side, please "
+        + "<a href=\"mailto:tor-assistants@torproject.org\">contact "
+        + "us</a>!</p>\n");
+  }
+
+  private void writeResultsTable(PrintWriter out,
+      List<String[]> tableRows) throws IOException {
+    out.print("<br>\n");
+    out.print("<table>\n");
+    out.print("<thead>\n");
+    out.print("<tr><th>Timestamp (UTC)</th><th>IP address(es)</th>"
+        + "<th>Identity fingerprint</th><th>Nickname</th><th>Exit</th>"
+        + "</tr>\n");
+    out.print("</thead>\n");
+    out.print("<tbody>\n");
+    for (String[] tableRow : tableRows) {
+      out.print("<tr>");
+      for (String tableColumn : tableRow) {
+        out.print("<td>" + tableColumn + "</td>");
+      }
+      out.print("</tr>\n");
+    }
+    out.print("</tbody>\n");
+    out.print("</table>\n");
+  }
+
+  private void writeNoneFound(PrintWriter out, String relayIP,
+      String timestampStr) throws IOException {
+    out.printf("        <p>None found!</p>\n"
+        + "        <p>Result is NEGATIVE with high certainty!</p>\n"
+        + "        <p>We did not find IP "
+        + "address " + relayIP + " in any of the relay or exit lists "
+        + "that were published on or within a day of %s.</p>\n",
+        timestampStr);
+  }
+
+  private void writeAddressesInSameNetwork(PrintWriter out,
+      String relayIP, String timestampStr,
+      List<String> addressesInSameNetwork) throws IOException {
+    out.printf("        <p>None found!</p>\n"
+        + "        <p>Result is NEGATIVE with high certainty!</p>\n"
+        + "        <p>We did not find IP "
+        + "address " + relayIP + " in any of the relay or exit lists "
+        + "that were published on or within a day of %s.</p>\n",
+        timestampStr);
+    if (!relayIP.contains(":")) {
+      out.print("        <p>The following other IP addresses of Tor "
+          + "relays in the same /24 network were found in relay "
+          + "and/or exit lists on or within a day of " + timestampStr
+          + " that could be related "
+          + "to IP address " + relayIP + ":</p>\n");
+    } else {
+      out.print("        <p>The following other IP addresses of Tor "
+          + "relays in the same /48 network were found in relay "
+          + "lists on or within a day of " + timestampStr
+          + " that could be related to IP "
+          + "address " + relayIP + ":</p>\n");
+    }
+    out.print("        <ul>\n");
+    for (String s : addressesInSameNetwork) {
+      out.print("        <li>" + s + "</li>\n");
+    }
+    out.print("        </ul>\n");
+  }
+
+  private void writeSummaryPositive(PrintWriter out, String relayIP,
+      String timestampStr) throws IOException {
+    out.print("        <p>Result is POSITIVE with high certainty!"
+        + "</p>\n"
+        + "        <p>We found one or more relays on IP address "
+        + relayIP + " in a ");
+    out.print("relay list published on or within a day of "
+        + timestampStr);
+    out.print(" that clients were likely to know.</p>\n");
+  }
+
+  private void writeSummaryNegative(PrintWriter out, String relayIP,
+      String timestampStr) throws IOException {
+    out.println("        <p>Result is NEGATIVE "
+        + "with high certainty!</p>\n");
+    out.println("        <p>We did not find any relay on IP address "
+        + relayIP
+        + " in the relay lists on or within a day of " + timestampStr
+        + ".</p>\n");
+  }
+
+  private void writeFooter(PrintWriter out) throws IOException {
+    out.println("        <br>\n"
+        + "      </div>\n"
+        + "    </div>\n"
+        + "    <div class=\"bottom\" id=\"bottom\">\n"
+        + "      <p>\"Tor\" and the \"Onion Logo\" are <a "
+          + "href=\"https://www.torproject.org/docs/trademark-faq.html.en"
+          + "\">registered trademarks</a> of The Tor Project, Inc.</p>\n"
+        + "    </div>\n"
+        + "  </body>\n"
+        + "</html>");
+    out.close();
   }
 }
 
