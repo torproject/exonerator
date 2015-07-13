@@ -12,6 +12,7 @@ import java.sql.Statement;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 import java.util.SortedSet;
 import java.util.TimeZone;
@@ -147,12 +148,14 @@ public class ExoneraTorServlet extends HttpServlet {
     long firstValidAfter = -1L, lastValidAfter = -1L;
     try {
       Statement statement = conn.createStatement();
-      String query = "SELECT MIN(validafter) AS first, "
-          + "MAX(validafter) AS last FROM consensus";
+      String query = "SELECT DATE(MIN(validafter)) AS first, "
+          + "DATE(MAX(validafter)) AS last FROM consensus";
       ResultSet rs = statement.executeQuery(query);
       if (rs.next()) {
-        firstValidAfter = rs.getTimestamp(1).getTime();
-        lastValidAfter = rs.getTimestamp(2).getTime();
+        Calendar utcCalendar = Calendar.getInstance(
+            TimeZone.getTimeZone("UTC"));
+        firstValidAfter = rs.getTimestamp(1, utcCalendar).getTime();
+        lastValidAfter = rs.getTimestamp(2, utcCalendar).getTime();
       }
       rs.close();
       statement.close();
@@ -396,12 +399,14 @@ public class ExoneraTorServlet extends HttpServlet {
       CallableStatement cs = conn.prepareCall(
           "{call search_statusentries_by_address_date(?, ?)}");
       cs.setString(1, relayIP);
-      cs.setDate(2, new java.sql.Date(timestamp));
+      Calendar utcCalendar = Calendar.getInstance(
+          TimeZone.getTimeZone("UTC"));
+      cs.setDate(2, new java.sql.Date(timestamp), utcCalendar);
       ResultSet rs = cs.executeQuery();
       while (rs.next()) {
         byte[] rawstatusentry = rs.getBytes(1);
         SortedSet<String> addresses = new TreeSet<String>();
-        long validafter = rs.getTimestamp(3).getTime();
+        long validafter = rs.getTimestamp(3, utcCalendar).getTime();
         String validAfterString = validAfterTimeFormat.format(validafter);
         String fingerprint = rs.getString(4);
         String nickname = "(Unknown)";
