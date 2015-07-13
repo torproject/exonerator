@@ -434,6 +434,8 @@ public class ExoneraTorServlet extends HttpServlet {
                 line.lastIndexOf(":"));
             String port = line.substring(line.lastIndexOf(":"));
             html.append("a <b>" + address + "</b>" + port + "\n");
+          } else if (line.startsWith("p ")) {
+            html.append(line + "\n");
           }
         }
         if (exitaddress != null && exitaddress.length() > 0) {
