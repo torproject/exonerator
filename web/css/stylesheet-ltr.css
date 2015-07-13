@@ -90,8 +90,15 @@ a.anchor {
     text-decoration: none;
 }
 
+tr {
+    padding-right: 15px;
+    padding-bottom: 5px;
+}
+
 td {
     vertical-align: top;
+    padding-right: 15px;
+    padding-bottom: 5px;
 }
 
 /* the banner */

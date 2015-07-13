@@ -12,13 +12,9 @@ import java.sql.Statement;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.SortedMap;
 import java.util.SortedSet;
 import java.util.TimeZone;
-import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -347,7 +343,7 @@ public class ExoneraTorServlet extends HttpServlet {
         + "have selected any of these relays to build circuits. "
         + "You may follow the links to relay lists and relay descriptors "
         + "to grep for the lines printed below and confirm that results "
-        + "are correct.<br>");
+        + "are correct.<br>\n");
     SimpleDateFormat validAfterTimeFormat = new SimpleDateFormat(
         "yyyy-MM-dd HH:mm:ss");
     validAfterTimeFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -395,11 +391,7 @@ public class ExoneraTorServlet extends HttpServlet {
     /* Search for status entries with the given IP address as onion
      * routing address, plus status entries of relays having an exit list
      * entry with the given IP address as exit address. */
-    SortedMap<Long, SortedMap<String, String>> statusEntries =
-        new TreeMap<Long, SortedMap<String, String>>();
-    SortedSet<Long> positiveConsensusesNoTarget = new TreeSet<Long>();
-    SortedMap<String, Set<Long>> relevantDescriptors =
-        new TreeMap<String, Set<Long>>();
+    SortedSet<String> tableRows = new TreeSet<String>();
     try {
       CallableStatement cs = conn.prepareCall(
           "{call search_statusentries_by_address_date(?, ?)}");
@@ -408,45 +400,38 @@ public class ExoneraTorServlet extends HttpServlet {
       ResultSet rs = cs.executeQuery();
       while (rs.next()) {
         byte[] rawstatusentry = rs.getBytes(1);
-        String descriptor = rs.getString(2);
+        SortedSet<String> addresses = new TreeSet<String>();
         long validafter = rs.getTimestamp(3).getTime();
-        positiveConsensusesNoTarget.add(validafter);
-        if (!relevantDescriptors.containsKey(descriptor)) {
-          relevantDescriptors.put(descriptor, new HashSet<Long>());
-        }
-        relevantDescriptors.get(descriptor).add(validafter);
+        String validAfterString = validAfterTimeFormat.format(validafter);
         String fingerprint = rs.getString(4);
-        String exitaddress = rs.getString(6);
-        StringBuilder html = new StringBuilder();
+        String nickname = "(Unknown)";
+        String exit = "Unknown";
         for (String line : new String(rawstatusentry).split("\n")) {
           if (line.startsWith("r ")) {
             String[] parts = line.split(" ");
-            boolean orAddressMatches = parts[6].equals(relayIP);
-            html.append("r " + parts[1] + " " + parts[2] + " "
-                + "<a href=\"serverdesc?desc-id=" + descriptor + "\" "
-                + "target=\"_blank\">" + parts[3] + "</a> " + parts[4]
-                + " " + parts[5] + " " + (orAddressMatches ? "<b>" : "")
-                + parts[6] + (orAddressMatches ? "</b>" : "") + " "
-                + parts[7] + " " + parts[8] + "\n");
-          } else if (line.startsWith("a ") &&
-              line.toLowerCase().contains(relayIP)) {
+            nickname = parts[1];
+            addresses.add(parts[6]);
+          } else if (line.startsWith("a ")) {
             String address = line.substring("a ".length(),
                 line.lastIndexOf(":"));
-            String port = line.substring(line.lastIndexOf(":"));
-            html.append("a <b>" + address + "</b>" + port + "\n");
+            addresses.add(address);
           } else if (line.startsWith("p ")) {
-            html.append(line + "\n");
+            exit = line.equals("p reject 1-65535") ? "No" : "Yes";
           }
         }
+        String exitaddress = rs.getString(6);
         if (exitaddress != null && exitaddress.length() > 0) {
-          long scanned = rs.getTimestamp(7).getTime();
-          html.append("  [ExitAddress <b>" + exitaddress
-              + "</b> " + validAfterTimeFormat.format(scanned) + "]\n");
+          addresses.add(exitaddress);
         }
-        if (!statusEntries.containsKey(validafter)) {
-          statusEntries.put(validafter, new TreeMap<String, String>());
+        StringBuilder html = new StringBuilder();
+        html.append("<tr><td>" + validAfterString + "</td><td>");
+        int writtenAddresses = 0;
+        for (String address : addresses) {
+          html.append((writtenAddresses++ > 0 ? ", " : "") + address);
         }
-        statusEntries.get(validafter).put(fingerprint, html.toString());
+        html.append("</td><td>" + fingerprint.toUpperCase() + "</td><td>"
+            + nickname + "</td><td>" + exit + "</td></tr>\n");
+        tableRows.add(html.toString());
       }
       rs.close();
       cs.close();
@@ -455,27 +440,21 @@ public class ExoneraTorServlet extends HttpServlet {
     }
 
     /* Print out what we found. */
-    SimpleDateFormat validAfterUrlFormat = new SimpleDateFormat(
-        "yyyy-MM-dd-HH-mm-ss");
-    validAfterUrlFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-    out.print("<pre><code>");
-    for (long consensus : relevantConsensuses) {
-      String validAfterDatetime = validAfterTimeFormat.format(consensus);
-      String validAfterString = validAfterUrlFormat.format(consensus);
-      out.print("valid-after <b>"
-          + "<a href=\"consensus?valid-after="
-          + validAfterString + "\" target=\"_blank\">"
-          + validAfterDatetime + "</b></a>\n");
-      if (statusEntries.containsKey(consensus)) {
-        for (String htmlString :
-            statusEntries.get(consensus).values()) {
-          out.print(htmlString);
-        }
+    if (!tableRows.isEmpty()) {
+      out.print("<br>\n");
+      out.print("<table>\n");
+      out.print("<thead>\n");
+      out.print("<tr><th>Timestamp (UTC)</th><th>IP address(es)</th>"
+          + "<th>Identity fingerprint</th><th>Nickname</th><th>Exit</th>"
+          + "</tr>\n");
+      out.print("</thead>\n");
+      out.print("<tbody>\n");
+      for (String tableRow : tableRows) {
+        out.print(tableRow);
       }
-      out.print("\n");
-    }
-    out.print("</code></pre>");
-    if (relevantDescriptors.isEmpty()) {
+      out.print("</tbody>\n");
+      out.print("</table>\n");
+    } else {
       out.printf("        <p>None found!</p>\n"
           + "        <p>Result is NEGATIVE with high certainty!</p>\n"
           + "        <p>We did not find IP "
@@ -590,7 +569,7 @@ public class ExoneraTorServlet extends HttpServlet {
     }
 
     /* Print out result. */
-    if (!positiveConsensusesNoTarget.isEmpty()) {
+    if (!tableRows.isEmpty()) {
       out.print("        <p>Result is POSITIVE with high certainty!"
             + "</p>\n"
           + "        <p>We found one or more relays on IP address "
