@@ -66,48 +66,169 @@ public class ExoneraTorServlet extends HttpServlet {
 
     /* Open a database connection that we'll use to handle the whole
      * request. */
-    Connection conn = null;
     long requestedConnection = System.currentTimeMillis();
-    try {
-      conn = this.ds.getConnection();
-    } catch (SQLException e) {
+    Connection conn = this.connectToDatabase();
+    if (conn == null) {
       this.writeUnableToConnectToDatabaseWarning(out);
       this.writeFooter(out);
       return;
     }
 
-    /* Look up first and last consensus in the database. */
-    long firstValidAfter = -1L, lastValidAfter = -1L;
-    try {
-      Statement statement = conn.createStatement();
-      String query = "SELECT DATE(MIN(validafter)) AS first, "
-          + "DATE(MAX(validafter)) AS last FROM consensus";
-      ResultSet rs = statement.executeQuery(query);
-      if (rs.next()) {
-        Calendar utcCalendar = Calendar.getInstance(
-            TimeZone.getTimeZone("UTC"));
-        firstValidAfter = rs.getTimestamp(1, utcCalendar).getTime();
-        lastValidAfter = rs.getTimestamp(2, utcCalendar).getTime();
-      }
-      rs.close();
-      statement.close();
-    } catch (SQLException e) {
-      /* Looks like we don't have any consensuses. */
-    }
-    if (firstValidAfter < 0L || lastValidAfter < 0L) {
+    /* Look up first and last date in the database. */
+    long[] firstAndLastDates = this.queryFirstAndLastDatesFromDatabase(
+        conn);
+    if (firstAndLastDates == null) {
       this.writeNoDataWarning(out);
       this.writeFooter(out);
-      try {
-        conn.close();
-        this.logger.info("Returned a database connection to the pool "
-            + "after " + (System.currentTimeMillis()
-            - requestedConnection) + " millis.");
-      } catch (SQLException e) {
-      }
-      return;
+      this.closeDatabaseConnection(conn, requestedConnection);
     }
 
     /* Parse IP parameter. */
+    String ipParameter = request.getParameter("ip");
+    StringBuilder ipWarningBuilder = new StringBuilder();
+    String relayIP = this.parseIpParameter(ipParameter, ipWarningBuilder);
+
+    /* Parse timestamp parameter. */
+    String timestampParameter = request.getParameter("timestamp");
+    StringBuilder timestampWarningBuilder = new StringBuilder();
+    String timestampStr = this.parseTimestampParameter(timestampParameter,
+        timestampWarningBuilder, firstAndLastDates);
+    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+    dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+    long timestamp = 0L;
+    if (timestampStr.length() > 0) {
+      try {
+        timestamp = dateFormat.parse(timestampParameter).getTime();
+      } catch (ParseException e) {
+        /* Already checked in parseTimestamp(). */
+      }
+    }
+
+    /* If either IP address or timestamp is provided, the other one must
+     * be provided, too. */
+    if (relayIP.length() < 1 && timestampStr.length() > 0 &&
+        ipWarningBuilder.length() < 1) {
+      ipWarningBuilder.append("Please provide an IP address.");
+    }
+    if (relayIP.length() > 0 && timestamp < 1 &&
+        timestampWarningBuilder.length() < 1) {
+      timestampWarningBuilder.append("Please provide a date.");
+    }
+
+    /* Write form with IP address and timestamp. */
+    this.writeForm(out, relayIP, ipWarningBuilder.toString(),
+        timestampStr, timestampWarningBuilder.toString());
+
+    if (relayIP.length() < 1 || timestamp < 1L) {
+      this.writeFooter(out);
+      this.closeDatabaseConnection(conn, requestedConnection);
+      return;
+    }
+
+    /* Consider all consensuses published on or within a day of the given
+     * date. */
+    long timestampFrom = timestamp - 24L * 60L * 60L * 1000L;
+    long timestampTo = timestamp + 2 * 24L * 60L * 60L * 1000L - 1L;
+    this.writeSearchInfos(out, relayIP, timestampStr);
+    SimpleDateFormat validAfterTimeFormat = new SimpleDateFormat(
+        "yyyy-MM-dd HH:mm:ss");
+    validAfterTimeFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+    String fromValidAfter = validAfterTimeFormat.format(timestampFrom);
+    String toValidAfter = validAfterTimeFormat.format(timestampTo);
+    SortedSet<Long> relevantConsensuses =
+        this.queryKnownConsensusValidAfterTimes(conn, fromValidAfter,
+        toValidAfter);
+    if (relevantConsensuses == null || relevantConsensuses.isEmpty()) {
+      this.writeNoDataForThisInterval(out, relayIP, timestampStr);
+      this.writeFooter(out);
+      this.closeDatabaseConnection(conn, requestedConnection);
+      return;
+    }
+
+    /* Search for status entries with the given IP address as onion
+     * routing address, plus status entries of relays having an exit list
+     * entry with the given IP address as exit address. */
+    List<String[]> statusEntries = this.queryStatusEntries(conn, relayIP,
+        timestamp, validAfterTimeFormat);
+
+    /* Print out what we found. */
+    if (!statusEntries.isEmpty()) {
+      this.writeResultsTable(out, statusEntries);
+    } else {
+      /* Run another query to find out if there are relays running on
+       * other IP addresses in the same /24 or /48 network and tell the
+       * user about it. */
+      List<String> addressesInSameNetwork = new ArrayList<String>();
+      if (!relayIP.contains(":")) {
+        String[] relayIPParts = relayIP.split("\\.");
+        byte[] address24Bytes = new byte[3];
+        address24Bytes[0] = (byte) Integer.parseInt(relayIPParts[0]);
+        address24Bytes[1] = (byte) Integer.parseInt(relayIPParts[1]);
+        address24Bytes[2] = (byte) Integer.parseInt(relayIPParts[2]);
+        String address24 = Hex.encodeHexString(address24Bytes);
+        addressesInSameNetwork = this.queryAddressesInSame24(conn,
+            address24, timestamp);
+      } else {
+        StringBuilder addressHex = new StringBuilder();
+        int start = relayIP.startsWith("::") ? 1 : 0;
+        int end = relayIP.length() - (relayIP.endsWith("::") ? 1 : 0);
+        String[] parts = relayIP.substring(start, end).split(":", -1);
+        for (int i = 0; i < parts.length; i++) {
+          String part = parts[i];
+          if (part.length() == 0) {
+            addressHex.append("x");
+          } else if (part.length() <= 4) {
+            addressHex.append(String.format("%4s", part));
+          } else {
+            addressHex = null;
+            break;
+          }
+        }
+        String address48 = null;
+        if (addressHex != null) {
+          String addressHexString = addressHex.toString();
+          addressHexString = addressHexString.replaceFirst("x",
+              String.format("%" + (33 - addressHexString.length())
+              + "s", "0"));
+          if (!addressHexString.contains("x") &&
+              addressHexString.length() == 32) {
+            address48 = addressHexString.replaceAll(" ", "0").
+                toLowerCase().substring(0, 12);
+          }
+        }
+        if (address48 != null) {
+          addressesInSameNetwork = this.queryAddressesInSame48(conn,
+              address48, timestamp);
+        }
+      }
+      if (addressesInSameNetwork == null ||
+          addressesInSameNetwork.isEmpty()) {
+        this.writeNoneFound(out, relayIP, timestampStr);
+      } else {
+        this.writeAddressesInSameNetwork(out, relayIP, timestampStr,
+            addressesInSameNetwork);
+      }
+      this.writeFooter(out);
+      this.closeDatabaseConnection(conn, requestedConnection);
+      return;
+    }
+
+    /* Print out result. */
+    if (!statusEntries.isEmpty()) {
+      this.writeSummaryPositive(out, relayIP, timestampStr);
+    } else {
+      this.writeSummaryNegative(out, relayIP, timestampStr);
+    }
+
+    this.closeDatabaseConnection(conn, requestedConnection);
+    this.writeFooter(out);
+  }
+
+  /* Helper methods for handling the request. */
+
+  private String parseIpParameter(String ipParameter,
+      StringBuilder ipWarningBuilder) {
+    String relayIP = "";
     Pattern ipv4AddressPattern = Pattern.compile(
         "^([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." +
         "([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." +
@@ -115,8 +236,6 @@ public class ExoneraTorServlet extends HttpServlet {
         "([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
     Pattern ipv6AddressPattern = Pattern.compile(
         "^\\[?[0-9a-fA-F:]{3,39}\\]?$");
-    String ipParameter = request.getParameter("ip");
-    String relayIP = "", ipWarning = "";
     if (ipParameter != null && ipParameter.length() > 0) {
       if (ipv4AddressPattern.matcher(ipParameter).matches()) {
         String[] ipParts = ipParameter.split("\\.");
@@ -156,84 +275,87 @@ public class ExoneraTorServlet extends HttpServlet {
           }
         }
         if (relayIP.length() < 1) {
-          ipWarning = "\"" + (ipParameter.length() > 40 ?
+          ipWarningBuilder.append("\"" + (ipParameter.length() > 40 ?
               StringEscapeUtils.escapeHtml(ipParameter.substring(0, 40))
               + "[...]" : StringEscapeUtils.escapeHtml(ipParameter))
-              + "\" is not a valid IP address.";
+              + "\" is not a valid IP address.");
         }
       } else {
-        ipWarning = "\"" + (ipParameter.length() > 20 ?
+        ipWarningBuilder.append("\"" + (ipParameter.length() > 20 ?
             StringEscapeUtils.escapeHtml(ipParameter.substring(0, 20))
             + "[...]" : StringEscapeUtils.escapeHtml(ipParameter))
-            + "\" is not a valid IP address.";
+            + "\" is not a valid IP address.");
       }
     }
+    return relayIP;
+  }
 
-    /* Parse timestamp parameter. */
-    String timestampParameter = request.getParameter("timestamp");
-    long timestamp = 0L;
-    String timestampStr = "", timestampWarning = "";
+  private String parseTimestampParameter(String timestampParameter,
+      StringBuilder timestampWarningBuilder, long[] firstAndLastDates) {
+    String timestampStr = "";
     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
     dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
     if (timestampParameter != null && timestampParameter.length() > 0) {
       try {
-        timestamp = dateFormat.parse(timestampParameter).getTime();
+        long timestamp = dateFormat.parse(timestampParameter).getTime();
         timestampStr = dateFormat.format(timestamp);
-        if (timestamp < firstValidAfter || timestamp > lastValidAfter) {
-          timestampWarning = "Please pick a date between \""
-              + dateFormat.format(firstValidAfter) + "\" and \""
-              + dateFormat.format(lastValidAfter) + "\".";
-          timestamp = 0L;
+        if (timestamp < firstAndLastDates[0] ||
+            timestamp > firstAndLastDates[1]) {
+          timestampWarningBuilder.append("Please pick a date between \""
+              + dateFormat.format(firstAndLastDates[0]) + "\" and \""
+              + dateFormat.format(firstAndLastDates[1]) + "\".");
         }
       } catch (ParseException e) {
         /* We have no way to handle this exception, other than leaving
            timestampStr at "". */
-        timestampWarning = "\"" + (timestampParameter.length() > 20 ?
+        timestampWarningBuilder.append("\""
+            + (timestampParameter.length() > 20 ?
             StringEscapeUtils.escapeHtml(timestampParameter.
             substring(0, 20)) + "[...]" :
             StringEscapeUtils.escapeHtml(timestampParameter))
-            + "\" is not a valid date.";
+            + "\" is not a valid date.");
       }
     }
+    return timestampStr;
+  }
 
-    /* If either IP address or timestamp is provided, the other one must
-     * be provided, too. */
-    if (relayIP.length() < 1 && timestampStr.length() > 0 &&
-        ipWarning.length() < 1) {
-      ipWarning = "Please provide an IP address.";
+  /* Helper methods for querying the database. */
+
+  private Connection connectToDatabase() {
+    Connection conn = null;
+    try {
+      conn = this.ds.getConnection();
+    } catch (SQLException e) {
     }
-    if (relayIP.length() > 0 && timestamp < 1 &&
-        timestampWarning.length() < 1) {
-      timestampWarning = "Please provide a date.";
-    }
+    return conn;
+  }
 
-    /* Write form with IP address and timestamp. */
-    this.writeForm(out, relayIP, ipWarning, timestampStr,
-        timestampWarning);
-
-    if (relayIP.length() < 1 || timestamp < 1) {
-      this.writeFooter(out);
-      try {
-        conn.close();
-        this.logger.info("Returned a database connection to the pool "
-            + "after " + (System.currentTimeMillis()
-            - requestedConnection) + " millis.");
-      } catch (SQLException e) {
+  private long[] queryFirstAndLastDatesFromDatabase(Connection conn) {
+    long[] firstAndLastDates = null;
+    try {
+      Statement statement = conn.createStatement();
+      String query = "SELECT DATE(MIN(validafter)) AS first, "
+          + "DATE(MAX(validafter)) AS last FROM consensus";
+      ResultSet rs = statement.executeQuery(query);
+      if (rs.next()) {
+        Calendar utcCalendar = Calendar.getInstance(
+            TimeZone.getTimeZone("UTC"));
+        firstAndLastDates = new long[] {
+            rs.getTimestamp(1, utcCalendar).getTime(),
+            rs.getTimestamp(2, utcCalendar).getTime()
+        };
       }
-      return;
+      rs.close();
+      statement.close();
+    } catch (SQLException e) {
+      /* Looks like we don't have any consensuses. */
+      firstAndLastDates = null;
     }
+    return firstAndLastDates;
+  }
 
-    long timestampFrom, timestampTo;
-    /* Consider all consensuses published on or within a day of the given
-     * date. */
-    timestampFrom = timestamp - 24L * 60L * 60L * 1000L;
-    timestampTo = timestamp + 2 * 24L * 60L * 60L * 1000L - 1L;
-    this.writeSearchInfos(out, relayIP, timestampStr);
-    SimpleDateFormat validAfterTimeFormat = new SimpleDateFormat(
-        "yyyy-MM-dd HH:mm:ss");
-    validAfterTimeFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-    String fromValidAfter = validAfterTimeFormat.format(timestampFrom);
-    String toValidAfter = validAfterTimeFormat.format(timestampTo);
+  private SortedSet<Long> queryKnownConsensusValidAfterTimes(
+      Connection conn, String fromValidAfter, String toValidAfter) {
     SortedSet<Long> relevantConsensuses = new TreeSet<Long>();
     try {
       Statement statement = conn.createStatement();
@@ -250,24 +372,15 @@ public class ExoneraTorServlet extends HttpServlet {
     } catch (SQLException e) {
       /* Looks like we don't have any consensuses in the requested
        * interval. */
+      relevantConsensuses = null;
     }
-    if (relevantConsensuses.isEmpty()) {
-      this.writeNoDataForThisInterval(out, relayIP, timestampStr);
-      this.writeFooter(out);
-      try {
-        conn.close();
-        this.logger.info("Returned a database connection to the pool "
-            + "after " + (System.currentTimeMillis()
-            - requestedConnection) + " millis.");
-      } catch (SQLException e) {
-      }
-      return;
-    }
+    return relevantConsensuses;
+  }
 
-    /* Search for status entries with the given IP address as onion
-     * routing address, plus status entries of relays having an exit list
-     * entry with the given IP address as exit address. */
-    List<String[]> tableRows = new ArrayList<String[]>();
+  private List<String[]> queryStatusEntries(Connection conn,
+      String relayIP, long timestamp,
+      SimpleDateFormat validAfterTimeFormat) {
+    List<String[]> statusEntries = new ArrayList<String[]>();
     try {
       CallableStatement cs = conn.prepareCall(
           "{call search_statusentries_by_address_date(?, ?)}");
@@ -306,120 +419,69 @@ public class ExoneraTorServlet extends HttpServlet {
         for (String address : addresses) {
           sb.append((writtenAddresses++ > 0 ? ", " : "") + address);
         }
-        String[] tableRow = new String[] { validAfterString,
+        String[] statusEntry = new String[] { validAfterString,
             sb.toString(), fingerprint, nickname, exit };
-        tableRows.add(tableRow);
+        statusEntries.add(statusEntry);
       }
       rs.close();
       cs.close();
     } catch (SQLException e) {
       /* Nothing found. */
+      statusEntries = null;
     }
+    return statusEntries;
+  }
 
-    /* Print out what we found. */
-    if (!tableRows.isEmpty()) {
-      this.writeResultsTable(out, tableRows);
-    } else {
-      /* Run another query to find out if there are relays running on
-       * other IP addresses in the same /24 or /48 network and tell the
-       * user about it. */
-      List<String> addressesInSameNetwork = new ArrayList<String>();
-      if (!relayIP.contains(":")) {
-        String[] relayIPParts = relayIP.split("\\.");
-        byte[] address24Bytes = new byte[3];
-        address24Bytes[0] = (byte) Integer.parseInt(relayIPParts[0]);
-        address24Bytes[1] = (byte) Integer.parseInt(relayIPParts[1]);
-        address24Bytes[2] = (byte) Integer.parseInt(relayIPParts[2]);
-        String address24 = Hex.encodeHexString(address24Bytes);
-        try {
-          CallableStatement cs = conn.prepareCall(
-              "{call search_addresses_in_same_24 (?, ?)}");
-          cs.setString(1, address24);
-          cs.setDate(2, new java.sql.Date(timestamp));
-          ResultSet rs = cs.executeQuery();
-          while (rs.next()) {
-            String address = rs.getString(1);
-            if (!addressesInSameNetwork.contains(address)) {
-              addressesInSameNetwork.add(address);
-            }
-          }
-          rs.close();
-          cs.close();
-        } catch (SQLException e) {
-          /* No other addresses in the same /24 found. */
-        }
-      } else {
-        StringBuilder addressHex = new StringBuilder();
-        int start = relayIP.startsWith("::") ? 1 : 0;
-        int end = relayIP.length() - (relayIP.endsWith("::") ? 1 : 0);
-        String[] parts = relayIP.substring(start, end).split(":", -1);
-        for (int i = 0; i < parts.length; i++) {
-          String part = parts[i];
-          if (part.length() == 0) {
-            addressHex.append("x");
-          } else if (part.length() <= 4) {
-            addressHex.append(String.format("%4s", part));
-          } else {
-            addressHex = null;
-            break;
-          }
-        }
-        String address48 = null;
-        if (addressHex != null) {
-          String addressHexString = addressHex.toString();
-          addressHexString = addressHexString.replaceFirst("x",
-              String.format("%" + (33 - addressHexString.length())
-              + "s", "0"));
-          if (!addressHexString.contains("x") &&
-              addressHexString.length() == 32) {
-            address48 = addressHexString.replaceAll(" ", "0").
-                toLowerCase().substring(0, 12);
-          }
-        }
-        if (address48 != null) {
-          try {
-            CallableStatement cs = conn.prepareCall(
-                "{call search_addresses_in_same_48 (?, ?)}");
-            cs.setString(1, address48);
-            cs.setDate(2, new java.sql.Date(timestamp));
-            ResultSet rs = cs.executeQuery();
-            while (rs.next()) {
-              String address = rs.getString(1);
-              if (!addressesInSameNetwork.contains(address)) {
-                addressesInSameNetwork.add(address);
-              }
-            }
-            rs.close();
-            cs.close();
-          } catch (SQLException e) {
-            /* No other addresses in the same /48 found. */
-          }
+  private List<String> queryAddressesInSame24(Connection conn,
+      String address24, long timestamp) {
+    List<String> addressesInSameNetwork = new ArrayList<String>();
+    try {
+      CallableStatement cs = conn.prepareCall(
+          "{call search_addresses_in_same_24 (?, ?)}");
+      cs.setString(1, address24);
+      cs.setDate(2, new java.sql.Date(timestamp));
+      ResultSet rs = cs.executeQuery();
+      while (rs.next()) {
+        String address = rs.getString(1);
+        if (!addressesInSameNetwork.contains(address)) {
+          addressesInSameNetwork.add(address);
         }
       }
-      if (addressesInSameNetwork.isEmpty()) {
-        this.writeNoneFound(out, relayIP, timestampStr);
-      } else {
-        this.writeAddressesInSameNetwork(out, relayIP, timestampStr,
-            addressesInSameNetwork);
-      }
-      this.writeFooter(out);
-      try {
-        conn.close();
-        this.logger.info("Returned a database connection to the pool "
-            + "after " + (System.currentTimeMillis()
-            - requestedConnection) + " millis.");
-      } catch (SQLException e) {
-      }
-      return;
+      rs.close();
+      cs.close();
+    } catch (SQLException e) {
+      /* No other addresses in the same /24 found. */
+      addressesInSameNetwork = null;
     }
+    return addressesInSameNetwork;
+  }
 
-    /* Print out result. */
-    if (!tableRows.isEmpty()) {
-      this.writeSummaryPositive(out, relayIP, timestampStr);
-    } else {
-      this.writeSummaryNegative(out, relayIP, timestampStr);
+  private List<String> queryAddressesInSame48(Connection conn,
+      String address48, long timestamp) {
+    List<String> addressesInSameNetwork = new ArrayList<String>();
+    try {
+      CallableStatement cs = conn.prepareCall(
+          "{call search_addresses_in_same_48 (?, ?)}");
+      cs.setString(1, address48);
+      cs.setDate(2, new java.sql.Date(timestamp));
+      ResultSet rs = cs.executeQuery();
+      while (rs.next()) {
+        String address = rs.getString(1);
+        if (!addressesInSameNetwork.contains(address)) {
+          addressesInSameNetwork.add(address);
+        }
+      }
+      rs.close();
+      cs.close();
+    } catch (SQLException e) {
+      /* No other addresses in the same /48 found. */
+      addressesInSameNetwork = null;
     }
+    return addressesInSameNetwork;
+  }
 
+  private void closeDatabaseConnection(Connection conn,
+      long requestedConnection) {
     try {
       conn.close();
       this.logger.info("Returned a database connection to the pool "
@@ -427,7 +489,7 @@ public class ExoneraTorServlet extends HttpServlet {
           - requestedConnection) + " millis.");
     } catch (SQLException e) {
     }
-    this.writeFooter(out);
+    return;
   }
 
   /* Helper methods for writing the response. */
