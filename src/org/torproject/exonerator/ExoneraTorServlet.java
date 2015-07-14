@@ -14,6 +14,8 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
+import java.util.Locale;
+import java.util.ResourceBundle;
 import java.util.SortedSet;
 import java.util.TimeZone;
 import java.util.TreeSet;
@@ -64,13 +66,17 @@ public class ExoneraTorServlet extends HttpServlet {
     PrintWriter out = response.getWriter();
     this.writeHeader(out);
 
+    /* Find the right resource bundle for the user's locale. */
+    Locale locale = request.getLocale();
+    ResourceBundle rb = ResourceBundle.getBundle("ExoneraTor", locale);
+
     /* Open a database connection that we'll use to handle the whole
      * request. */
     long requestedConnection = System.currentTimeMillis();
     Connection conn = this.connectToDatabase();
     if (conn == null) {
-      this.writeSummaryUnableToConnectToDatabase(out);
-      this.writeFooter(out);
+      this.writeSummaryUnableToConnectToDatabase(out, rb);
+      this.writeFooter(out, rb);
       return;
     }
 
@@ -78,8 +84,8 @@ public class ExoneraTorServlet extends HttpServlet {
     long[] firstAndLastDates = this.queryFirstAndLastDatesFromDatabase(
         conn);
     if (firstAndLastDates == null) {
-      this.writeSummaryNoData(out);
-      this.writeFooter(out);
+      this.writeSummaryNoData(out, rb);
+      this.writeFooter(out, rb);
       this.closeDatabaseConnection(conn, requestedConnection);
     }
     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
@@ -114,15 +120,17 @@ public class ExoneraTorServlet extends HttpServlet {
     }
 
     /* Write form. */
-    this.writeForm(out, relayIP, relayIPHasError ||
+    this.writeForm(out, rb, relayIP, relayIPHasError ||
         ("".equals(relayIP) && !"".equals(timestampStr)), timestampStr,
-        !relayIPHasError && (timestampHasError || timestampOutOfRange ||
+        !relayIPHasError &&
+        !("".equals(relayIP) && !"".equals(timestampStr)) &&
+        (timestampHasError || timestampOutOfRange ||
         (!"".equals(relayIP) && "".equals(timestampStr))));
 
     /* If both parameters are empty, don't print any summary and exit.
      * This is the start page. */
     if ("".equals(relayIP) && "".equals(timestampStr)) {
-      this.writeFooter(out);
+      this.writeFooter(out, rb);
       this.closeDatabaseConnection(conn, requestedConnection);
       return;
     }
@@ -131,11 +139,11 @@ public class ExoneraTorServlet extends HttpServlet {
      * and exit. */
     if ("".equals(relayIP) || "".equals(timestampStr)) {
       if ("".equals(relayIP)) {
-        writeSummaryNoIp(out);
+        writeSummaryNoIp(out, rb);
       } else {
-        writeSummaryNoTimestamp(out);
+        writeSummaryNoTimestamp(out, rb);
       }
-      this.writeFooter(out);
+      this.writeFooter(out, rb);
       this.closeDatabaseConnection(conn, requestedConnection);
       return;
     }
@@ -144,14 +152,14 @@ public class ExoneraTorServlet extends HttpServlet {
      * exit. */
     if (relayIPHasError || timestampHasError || timestampOutOfRange) {
       if (relayIPHasError) {
-        this.writeSummaryInvalidIp(out, ipParameter);
+        this.writeSummaryInvalidIp(out, rb, ipParameter);
       } else if (timestampHasError) {
-        this.writeSummaryInvalidTimestamp(out, timestampParameter);
+        this.writeSummaryInvalidTimestamp(out, rb, timestampParameter);
       } else if (timestampOutOfRange) {
-        this.writeSummaryTimestampOutsideRange(out, timestampStr,
+        this.writeSummaryTimestampOutsideRange(out, rb, timestampStr,
             firstDate, lastDate);
       }
-      this.writeFooter(out);
+      this.writeFooter(out, rb);
       this.closeDatabaseConnection(conn, requestedConnection);
       return;
     }
@@ -169,8 +177,8 @@ public class ExoneraTorServlet extends HttpServlet {
         this.queryKnownConsensusValidAfterTimes(conn, fromValidAfter,
         toValidAfter);
     if (relevantConsensuses == null || relevantConsensuses.isEmpty()) {
-      this.writeSummaryNoDataForThisInterval(out);
-      this.writeFooter(out);
+      this.writeSummaryNoDataForThisInterval(out, rb);
+      this.writeFooter(out, rb);
       this.closeDatabaseConnection(conn, requestedConnection);
       return;
     }
@@ -233,21 +241,21 @@ public class ExoneraTorServlet extends HttpServlet {
 
     /* Print out result. */
     if (!statusEntries.isEmpty()) {
-      this.writeSummaryPositive(out, relayIP, timestampStr);
-      this.writeTechnicalDetails(out, relayIP, timestampStr,
+      this.writeSummaryPositive(out, rb, relayIP, timestampStr);
+      this.writeTechnicalDetails(out, rb, relayIP, timestampStr,
           statusEntries);
     } else if (addressesInSameNetwork != null &&
         !addressesInSameNetwork.isEmpty()) {
-      this.writeSummaryAddressesInSameNetwork(out, relayIP,
+      this.writeSummaryAddressesInSameNetwork(out, rb, relayIP,
           timestampStr, addressesInSameNetwork);
     } else {
-      this.writeSummaryNegative(out, relayIP, timestampStr);
+      this.writeSummaryNegative(out, rb, relayIP, timestampStr);
     }
 
-    this.writePermanentLink(out, relayIP, timestampStr);
+    this.writePermanentLink(out, rb, relayIP, timestampStr);
 
     this.closeDatabaseConnection(conn, requestedConnection);
-    this.writeFooter(out);
+    this.writeFooter(out, rb);
   }
 
   /* Helper methods for handling the request. */
@@ -398,8 +406,8 @@ public class ExoneraTorServlet extends HttpServlet {
         long validafter = rs.getTimestamp(3, utcCalendar).getTime();
         String validAfterString = validAfterTimeFormat.format(validafter);
         String fingerprint = rs.getString(4).toUpperCase();
-        String nickname = "(Unknown)";
-        String exit = "Unknown";
+        String nickname = null;
+        String exit = "U";
         for (String line : new String(rawstatusentry).split("\n")) {
           if (line.startsWith("r ")) {
             String[] parts = line.split(" ");
@@ -410,7 +418,7 @@ public class ExoneraTorServlet extends HttpServlet {
                 line.lastIndexOf(":"));
             addresses.add(address);
           } else if (line.startsWith("p ")) {
-            exit = line.equals("p reject 1-65535") ? "No" : "Yes";
+            exit = line.equals("p reject 1-65535") ? "N" : "Y";
           }
         }
         String exitaddress = rs.getString(6);
@@ -521,215 +529,244 @@ public class ExoneraTorServlet extends HttpServlet {
         + "</div><!-- row -->\n");
   }
 
-  private void writeForm(PrintWriter out, String relayIP,
-      boolean relayIPHasError, String timestampStr,
+  private void writeForm(PrintWriter out, ResourceBundle rb,
+      String relayIP, boolean relayIPHasError, String timestampStr,
       boolean timestampHasError) throws IOException {
     out.printf("<div class=\"row\">\n"
         + "<div class=\"col-xs-12\">\n"
         + "<div class=\"text-center\">\n"
         + "<form class=\"form-inline\">\n"
         + "<div class=\"form-group%s\">\n"
-        + "<label for=\"inputIp\" class=\"control-label\">IP "
-          + "address</label>\n"
+        + "<label for=\"inputIp\" class=\"control-label\">%s</label>\n"
         + "<input type=\"text\" class=\"form-control\" name=\"ip\" "
           + "id=\"inputIp\" placeholder=\"86.59.21.38\"%s required>\n"
         + "</div><!-- form-group -->\n"
         + "<div class=\"form-group%s\">\n"
         + "<label for=\"inputTimestamp\" "
-          + "class=\"control-label\">Date</label>\n"
+          + "class=\"control-label\">%s</label>\n"
         + "<input type=\"date\" class=\"form-control\" "
           + "name=\"timestamp\" id=\"inputTimestamp\" "
           + "placeholder=\"2010-01-01\"%s required>\n"
         + "</div><!-- form-group -->\n"
         + "<button type=\"submit\" "
-          + "class=\"btn btn-primary\">Search</button>\n"
+          + "class=\"btn btn-primary\">%s</button>\n"
         + "</form>\n"
         + "</div><!-- text-center -->\n"
         + "</div><!-- col -->\n"
         + "</div><!-- row -->\n",
         relayIPHasError ? " has-error" : "",
+        rb.getString("form.ip.label"),
         relayIP != null && relayIP.length() > 0 ?
             " value=\"" + relayIP + "\"" : "",
         timestampHasError ? " has-error" : "",
+        rb.getString("form.timestamp.label"),
         timestampStr != null && timestampStr.length() > 0 ?
-            " value=\"" + timestampStr + "\"" : "");
+            " value=\"" + timestampStr + "\"" : "",
+        rb.getString("form.search.label"));
   }
 
-  private void writeSummaryUnableToConnectToDatabase(PrintWriter out)
+  private void writeSummaryUnableToConnectToDatabase(PrintWriter out,
+      ResourceBundle rb) throws IOException {
+    out.printf("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<h2>%s</h2>\n"
+        + "<div class=\"panel panel-danger\">\n"
+        + "<div class=\"panel-heading\">\n"
+        + "<h3 class=\"panel-title\">%s</h3>\n"
+        + "</div><!-- panel-heading -->\n"
+        + "<div class=\"panel-body\">\n"
+        + "%s\n"
+        + "</div><!-- panel-body -->\n"
+        + "</div><!-- panel -->\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n",
+        rb.getString("summary.heading"),
+        rb.getString("summary.serverproblem.dbnoconnect.title"),
+        String.format(
+            rb.getString("summary.serverproblem.dbnoconnect.body.text"),
+            "<a href=\"https://www.torproject.org/about/contact\">"
+            + rb.getString("summary.serverproblem.dbnoconnect.body.link")
+            + "</a>"));
+  }
+
+  private void writeSummaryNoData(PrintWriter out, ResourceBundle rb)
       throws IOException {
-    out.print("<div class=\"row\">\n"
-        + "<div class=\"col-xs-12\">\n"
-        + "<h2>Summary</h2>\n"
-        + "<div class=\"panel panel-danger\">\n"
-        + "<div class=\"panel-heading\">\n"
-        + "<h3 class=\"panel-title\">Server problem</h3>\n"
-        + "</div><!-- panel-heading -->\n"
-        + "<div class=\"panel-body\">\n"
-        + "Unable to connect to the database.\n"
-        + "Please try again later.\n"
-        + "If this problem persists, please <a "
-          + "href=\"https://www.torproject.org/about/contact\">let us "
-          + "know</a>!\n"
-        + "</div><!-- panel-body -->\n"
-        + "</div><!-- panel -->\n"
-        + "</div><!-- col -->\n"
-        + "</div><!-- row -->\n");
-  }
-
-  private void writeSummaryNoData(PrintWriter out) throws IOException {
-    out.print("<div class=\"row\">\n"
-        + "<div class=\"col-xs-12\">\n"
-        + "<h2>Summary</h2>\n"
-        + "<div class=\"panel panel-danger\">\n"
-        + "<div class=\"panel-heading\">\n"
-        + "<h3 class=\"panel-title\">Server problem</h3>\n"
-        + "</div><!-- panel-heading -->\n"
-        + "<div class=\"panel-body\">\n"
-        + "The database appears to be empty.\n"
-        + "Please try again later.\n"
-        + "If this problem persists, please <a "
-          + "href=\"https://www.torproject.org/about/contact\">let us "
-          + "know</a>!\n"
-        + "</div><!-- panel-body -->\n"
-        + "</div><!-- panel -->\n"
-        + "</div><!-- col -->\n"
-        + "</div><!-- row -->\n");
-  }
-
-  private void writeSummaryNoTimestamp(PrintWriter out) throws IOException {
     out.printf("<div class=\"row\">\n"
         + "<div class=\"col-xs-12\">\n"
-        + "<h2>Summary</h2>\n"
+        + "<h2>%s</h2>\n"
         + "<div class=\"panel panel-danger\">\n"
         + "<div class=\"panel-heading\">\n"
-        + "<h3 class=\"panel-title\">No date parameter given</h3>\n"
+        + "<h3 class=\"panel-title\">%s</h3>\n"
         + "</div><!-- panel-heading -->\n"
         + "<div class=\"panel-body\">\n"
-        + "<p>Sorry, you also need to provide a date parameter.</p>\n"
+        + "%s\n"
         + "</div><!-- panel-body -->\n"
         + "</div><!-- panel -->\n"
         + "</div><!-- col -->\n"
-        + "</div><!-- row -->\n");
+        + "</div><!-- row -->\n",
+        rb.getString("summary.heading"),
+        rb.getString("summary.serverproblem.dbempty.title"),
+        String.format(
+            rb.getString("summary.serverproblem.dbempty.body.text"),
+            "<a href=\"https://www.torproject.org/about/contact\">"
+            + rb.getString("summary.serverproblem.dbempty.body.link")
+            + "</a>"));
   }
 
-  private void writeSummaryNoIp(PrintWriter out) throws IOException {
+  private void writeSummaryNoTimestamp(PrintWriter out, ResourceBundle rb)
+      throws IOException {
     out.printf("<div class=\"row\">\n"
         + "<div class=\"col-xs-12\">\n"
-        + "<h2>Summary</h2>\n"
+        + "<h2>%s</h2>\n"
         + "<div class=\"panel panel-danger\">\n"
         + "<div class=\"panel-heading\">\n"
-        + "<h3 class=\"panel-title\">No IP address parameter given</h3>\n"
+        + "<h3 class=\"panel-title\">%s</h3>\n"
         + "</div><!-- panel-heading -->\n"
         + "<div class=\"panel-body\">\n"
-        + "<p>Sorry, you also need to provide an IP address "
-          + "parameter.</p>\n"
+        + "%s\n"
         + "</div><!-- panel-body -->\n"
         + "</div><!-- panel -->\n"
         + "</div><!-- col -->\n"
-        + "</div><!-- row -->\n");
+        + "</div><!-- row -->\n",
+        rb.getString("summary.heading"),
+        rb.getString("summary.invalidparams.notimestamp.title"),
+        rb.getString("summary.invalidparams.notimestamp.body"));
+  }
+
+  private void writeSummaryNoIp(PrintWriter out, ResourceBundle rb)
+      throws IOException {
+    out.printf("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<h2>%s</h2>\n"
+        + "<div class=\"panel panel-danger\">\n"
+        + "<div class=\"panel-heading\">\n"
+        + "<h3 class=\"panel-title\">%s</h3>\n"
+        + "</div><!-- panel-heading -->\n"
+        + "<div class=\"panel-body\">\n"
+        + "%s\n"
+        + "</div><!-- panel-body -->\n"
+        + "</div><!-- panel -->\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n",
+        rb.getString("summary.heading"),
+        rb.getString("summary.invalidparams.noip.title"),
+        rb.getString("summary.invalidparams.noip.body"));
   }
 
   private void writeSummaryTimestampOutsideRange(PrintWriter out,
-      String timestampStr, String firstDate, String lastDate)
-      throws IOException {
+      ResourceBundle rb, String timestampStr, String firstDate,
+      String lastDate) throws IOException {
     out.printf("<div class=\"row\">\n"
         + "<div class=\"col-xs-12\">\n"
-        + "<h2>Summary</h2>\n"
+        + "<h2>%s</h2>\n"
         + "<div class=\"panel panel-danger\">\n"
         + "<div class=\"panel-heading\">\n"
-        + "<h3 class=\"panel-title\">Date parameter out of range</h3>\n"
+        + "<h3 class=\"panel-title\">%s</h3>\n"
         + "</div><!-- panel-heading -->\n"
         + "<div class=\"panel-body\">\n"
-        + "<p>Sorry, the database does not contain any data from %s.\n"
-        + "Please pick a date between %s and %s.</p>\n"
-        + "</div><!-- panel-body -->\n"
-        + "</div><!-- panel -->\n"
-        + "</div><!-- col -->\n"
-        + "</div><!-- row -->\n", timestampStr, firstDate, lastDate);
-  }
-
-  private void writeSummaryInvalidIp(PrintWriter out, String ipParameter)
-      throws IOException {
-    out.printf("<div class=\"row\">\n"
-        + "<div class=\"col-xs-12\">\n"
-        + "<h2>Summary</h2>\n"
-        + "<div class=\"panel panel-danger\">\n"
-        + "<div class=\"panel-heading\">\n"
-        + "<h3 class=\"panel-title\">Invalid IP address parameter</h3>\n"
-        + "</div><!-- panel-heading -->\n"
-        + "<div class=\"panel-body\">\n"
-        + "<p>Sorry, \"%s\" is not a valid IP address.\n"
-        + "The expected IP address formats are \"a.b.c.d\" or "
-          + "\"[a:b:c::d]\".</p>\n"
+        + "%s\n"
         + "</div><!-- panel-body -->\n"
         + "</div><!-- panel -->\n"
         + "</div><!-- col -->\n"
         + "</div><!-- row -->\n",
-        ipParameter.length() > 40 ?
+        rb.getString("summary.heading"),
+        rb.getString("summary.invalidparams.timestamprange.title"),
+        String.format(
+            rb.getString("summary.invalidparams.timestamprange.body"),
+            timestampStr, firstDate, lastDate));
+  }
+
+  private void writeSummaryInvalidIp(PrintWriter out, ResourceBundle rb,
+      String ipParameter) throws IOException {
+    String escapedIpParameter = ipParameter.length() > 40 ?
         StringEscapeUtils.escapeHtml(ipParameter.substring(0, 40))
-        + "[...]" : StringEscapeUtils.escapeHtml(ipParameter));
+        + "[...]" : StringEscapeUtils.escapeHtml(ipParameter);
+    out.printf("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<h2>%s</h2>\n"
+        + "<div class=\"panel panel-danger\">\n"
+        + "<div class=\"panel-heading\">\n"
+        + "<h3 class=\"panel-title\">%s</h3>\n"
+        + "</div><!-- panel-heading -->\n"
+        + "<div class=\"panel-body\">\n"
+        + "%s\n"
+        + "</div><!-- panel-body -->\n"
+        + "</div><!-- panel -->\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n",
+        rb.getString("summary.heading"),
+        rb.getString("summary.invalidparams.invalidip.title"),
+        String.format("summary.invalidparams.invalidip.body",
+            escapedIpParameter, "\"a.b.c.d\"", "\"[a:b:c:d:e:f:g:h]\""));
   }
 
   private void writeSummaryInvalidTimestamp(PrintWriter out,
-      String timestampParameter) throws IOException {
+      ResourceBundle rb, String timestampParameter) throws IOException {
+    String escapedTimestampParameter = timestampParameter.length() > 20 ?
+        StringEscapeUtils.escapeHtml(timestampParameter.
+        substring(0, 20)) + "[...]" :
+        StringEscapeUtils.escapeHtml(timestampParameter);
     out.printf("<div class=\"row\">\n"
         + "<div class=\"col-xs-12\">\n"
-        + "<h2>Summary</h2>\n"
+        + "<h2>%s</h2>\n"
         + "<div class=\"panel panel-danger\">\n"
         + "<div class=\"panel-heading\">\n"
-        + "<h3 class=\"panel-title\">Invalid date parameter</h3>\n"
+        + "<h3 class=\"panel-title\">%s</h3>\n"
         + "</div><!-- panel-heading -->\n"
         + "<div class=\"panel-body\">\n"
-        + "<p>Sorry, \"%s\" is not a valid date.\n"
-        + "The expected date format is \"YYYY-MM-DD\".\n"
+        + "%s\n"
         + "</div><!-- panel-body -->\n"
         + "</div><!-- panel -->\n"
         + "</div><!-- col -->\n"
         + "</div><!-- row -->\n",
-        timestampParameter.length() > 20 ?
-        StringEscapeUtils.escapeHtml(timestampParameter.
-        substring(0, 20)) + "[...]" :
-        StringEscapeUtils.escapeHtml(timestampParameter));
+        rb.getString("summary.heading"),
+        rb.getString("summary.invalidparams.invalidtimestamp.title"),
+        String.format("summary.invalidparams.invalidtimestamp.body",
+            escapedTimestampParameter, "\"YYYY-MM-DD\""));
   }
 
-  private void writeSummaryNoDataForThisInterval(PrintWriter out)
-      throws IOException {
-    out.print("<div class=\"row\">\n"
+  private void writeSummaryNoDataForThisInterval(PrintWriter out,
+      ResourceBundle rb) throws IOException {
+    out.printf("<div class=\"row\">\n"
         + "<div class=\"col-xs-12\">\n"
-        + "<h2>Summary</h2>\n"
+        + "<h2>%s</h2>\n"
         + "<div class=\"panel panel-danger\">\n"
         + "<div class=\"panel-heading\">\n"
-        + "<h3 class=\"panel-title\">Server problem</h3>\n"
+        + "<h3 class=\"panel-title\">%s</h3>\n"
         + "</div><!-- panel-heading -->\n"
         + "<div class=\"panel-body\">\n"
-        + "The database does not contain any data for the requested "
-          + "date.\n"
-        + "Please try again later.\n"
-        + "If this problem persists, please <a "
-          + "href=\"https://www.torproject.org/about/contact\">let us "
-          + "know</a>!\n"
+        + "%s\n"
         + "</div><!-- panel-body -->\n"
         + "</div><!-- panel -->\n"
         + "</div><!-- col -->\n"
-        + "</div><!-- row -->\n");
+        + "</div><!-- row -->\n",
+        rb.getString("summary.heading"),
+        rb.getString("summary.serverproblem.nodata.title"),
+        String.format(
+            rb.getString("summary.serverproblem.nodata.body.text"),
+            "<a href=\"https://www.torproject.org/about/contact\">"
+            + rb.getString("summary.serverproblem.nodata.body.link")
+            + "</a>"));
   }
 
   private void writeSummaryAddressesInSameNetwork(PrintWriter out,
-      String relayIP, String timestampStr,
+      ResourceBundle rb, String relayIP, String timestampStr,
       List<String> addressesInSameNetwork) throws IOException {
     out.printf("<div class=\"row\">\n"
         + "<div class=\"col-xs-12\">\n"
-        + "<h2>Summary</h2>\n"
+        + "<h2>%s</h2>\n"
         + "<div class=\"panel panel-warning\">\n"
         + "<div class=\"panel-heading\">\n"
-        + "<h3 class=\"panel-title\">Result is negative</h3>\n"
+        + "<h3 class=\"panel-title\">%s</h3>\n"
         + "</div><!-- panel-heading -->\n"
         + "<div class=\"panel-body\">\n"
-        + "<p>We did not find IP address %s on or within a day of %s.\n"
-        + "But we did find other IP addresses of Tor relays in the same "
-          + "/%d network around the time:</p>\n"
-        + "<ul>\n", relayIP, timestampStr,
-        relayIP.contains(":") ? 48 : 24);
+        + "<p>%s</p>\n"
+        + "<ul>\n",
+        rb.getString("summary.heading"),
+        rb.getString("summary.negativesamenetwork.title"),
+        String.format(
+            rb.getString("summary.negativesamenetwork.body"),
+            relayIP, timestampStr, relayIP.contains(":") ? 48 : 24));
     for (String s : addressesInSameNetwork) {
       out.printf("<li><a href=\"/?ip=%s&timestamp=%s\">%s</a></li>\n",
           s.contains(":") ? "[" + s.replaceAll(":", "%3A") + "]" : s,
@@ -742,64 +779,91 @@ public class ExoneraTorServlet extends HttpServlet {
         + "</div><!-- row -->\n");
   }
 
-  private void writeSummaryPositive(PrintWriter out, String relayIP,
-      String timestampStr) throws IOException {
+  private void writeSummaryPositive(PrintWriter out, ResourceBundle rb,
+      String relayIP, String timestampStr) throws IOException {
     out.printf("<div class=\"row\">\n"
         + "<div class=\"col-xs-12\">\n"
-        + "<h2>Summary</h2>\n"
+        + "<h2>%s</h2>\n"
         + "<div class=\"panel panel-success\">\n"
         + "<div class=\"panel-heading\">\n"
-        + "<h3 class=\"panel-title\">Result is positive</h3>\n"
+        + "<h3 class=\"panel-title\">%s</h3>\n"
         + "</div><!-- panel-heading -->\n"
         + "<div class=\"panel-body\">\n"
-        + "We found one or more Tor relays on IP address %s on or within "
-          + "a day of %s that Tor clients were likely to know.\n"
+        + "%s\n"
         + "</div><!-- panel-body -->\n"
         + "</div><!-- panel -->\n"
         + "</div><!-- col -->\n"
-        + "</div><!-- row -->\n", relayIP, timestampStr);
+        + "</div><!-- row -->\n",
+        rb.getString("summary.heading"),
+        rb.getString("summary.positive.title"),
+        String.format(rb.getString("summary.positive.body"),
+            relayIP, timestampStr));
   }
 
-  private void writeSummaryNegative(PrintWriter out, String relayIP,
-      String timestampStr) throws IOException {
+  private void writeSummaryNegative(PrintWriter out, ResourceBundle rb,
+      String relayIP, String timestampStr) throws IOException {
     out.printf("<div class=\"row\">\n"
         + "<div class=\"col-xs-12\">\n"
-        + "<h2>Summary</h2>\n"
+        + "<h2>%s</h2>\n"
         + "<div class=\"panel panel-warning\">\n"
         + "<div class=\"panel-heading\">\n"
-        + "<h3 class=\"panel-title\">Result is negative</h3>\n"
+        + "<h3 class=\"panel-title\">%s</h3>\n"
         + "</div><!-- panel-heading -->\n"
         + "<div class=\"panel-body\">\n"
-        + "We did not find IP address %s on or within a day of %s.\n"
+        + "%s\n"
         + "</div><!-- panel-body -->\n"
         + "</div><!-- panel -->\n"
         + "</div><!-- col -->\n"
-        + "</div><!-- row -->\n", relayIP, timestampStr);
+        + "</div><!-- row -->\n",
+        rb.getString("summary.heading"),
+        rb.getString("summary.negative.title"),
+        String.format(rb.getString("summary.negative.body"),
+            relayIP, timestampStr));
   }
 
-  private void writeTechnicalDetails(PrintWriter out, String relayIP,
-      String timestampStr, List<String[]> tableRows) throws IOException {
+  private void writeTechnicalDetails(PrintWriter out, ResourceBundle rb,
+      String relayIP, String timestampStr, List<String[]> tableRows)
+      throws IOException {
     out.printf("<div class=\"row\">\n"
         + "<div class=\"col-xs-12\">\n"
-        + "<h2>Technical details</h2>\n"
-        + "<p>Looking up IP address %s on or within one day of %s. Tor "
-          + "clients could have selected this or these Tor relays to "
-          + "build circuits.</p>\n"
+        + "<h2>%s</h2>\n"
+        + "<p>%s</p>\n"
         + "<table class=\"table\">\n"
         + "<thead>\n"
         + "<tr>\n"
-        + "<th>Timestamp (UTC)</th>\n"
-        + "<th>IP address(es)</th>\n"
-        + "<th>Identity fingerprint</th>\n"
-        + "<th>Nickname</th>\n"
-        + "<th>Exit</th>\n"
+        + "<th>%s</th>\n"
+        + "<th>%s</th>\n"
+        + "<th>%s</th>\n"
+        + "<th>%s</th>\n"
+        + "<th>%s</th>\n"
         + "</tr>\n"
         + "</thead>\n"
-        + "<tbody>\n", relayIP, timestampStr);
+        + "<tbody>\n",
+        rb.getString("technicaldetails.heading"),
+        String.format(rb.getString("technicaldetails.pre"),
+            relayIP, timestampStr),
+        rb.getString("technicaldetails.colheader.timestamp"),
+        rb.getString("technicaldetails.colheader.ip"),
+        rb.getString("technicaldetails.colheader.fingerprint"),
+        rb.getString("technicaldetails.colheader.nickname"),
+        rb.getString("technicaldetails.colheader.exit"));
     for (String[] tableRow : tableRows) {
       out.print("<tr>");
-      for (String tableColumn : tableRow) {
-        out.print("<td>" + tableColumn + "</td>");
+      for (int i = 0; i < tableRow.length; i++) {
+        String content = tableRow[i];
+        if (i == 3 && content == null) {
+          content = "("
+              + rb.getString("technicaldetails.nickname.unknown") + ")";
+        } else if (i == 4) {
+          if (content.equals("U")) {
+            content = rb.getString("technicaldetails.exit.unknown");
+          } else if (content.equals("Y")) {
+            content = rb.getString("technicaldetails.exit.yes");
+          } else {
+            content = rb.getString("technicaldetails.exit.no");
+          }
+        }
+        out.print("<td>" + content + "</td>");
       }
       out.print("</tr>\n");
     }
@@ -810,66 +874,60 @@ public class ExoneraTorServlet extends HttpServlet {
         + "</div><!-- row -->\n");
   }
 
-  private void writePermanentLink(PrintWriter out, String relayIP,
-      String timestampStr) throws IOException {
+  private void writePermanentLink(PrintWriter out, ResourceBundle rb,
+      String relayIP, String timestampStr) throws IOException {
     String encodedAddress = relayIP.contains(":") ?
         "[" + relayIP.replaceAll(":", "%3A") + "]" : relayIP;
     out.printf("<div class=\"row\">\n"
         + "<div class=\"col-xs-12\">\n"
-        + "<h2>Permanent link</h2>\n"
+        + "<h2>%s</h2>\n"
         + "<pre>https://exonerator.torproject.org/?ip=%s&amp;"
           + "timestamp=%s</pre>\n"
         + "</div><!-- col -->\n"
-        + "</div><!-- row -->\n", encodedAddress, timestampStr);
+        + "</div><!-- row -->\n",
+        rb.getString("permanentlink.heading"),
+        encodedAddress, timestampStr);
   }
 
-  private void writeFooter(PrintWriter out) throws IOException {
-    out.println("<div class=\"row\">\n"
+  private void writeFooter(PrintWriter out, ResourceBundle rb)
+      throws IOException {
+    out.printf("<div class=\"row\">\n"
         + "<div class=\"col-xs-6\">\n"
-        + "<h3>About Tor</h3>\n"
+        + "<h3>%s</h3>\n"
         + "<p class=\"small\">\n"
-        + "Tor anonymizes Internet traffic by <a "
-          + "href=\"https://www.torproject.org/about/"
-          + "overview#thesolution\">sending packets through a series of "
-          + "encrypted hops before they reach their destination</a>.\n"
-        + "Therefore, if you see traffic from a Tor relay, you may be "
-          + "seeing traffic that originated from someone using Tor, "
-          + "rather than from the relay operator.\n"
-        + "The Tor Project and Tor relay operators have no records of "
-          + "the traffic that passes over the network.\n"
-        + "Be sure to <a "
-          + "href=\"https://www.torproject.org/about/overview\">learn "
-          + "more about Tor</a>, and don't hesitate to <a "
-          + "href=\"https://www.torproject.org/about/contact\">contact "
-          + "The Tor Project</a> for more information.\n"
+        + "%s\n"
         + "</p>\n"
-        + "</div><!-- col -->\n"
-        + "<div class=\"col-xs-6\">\n"
-        + "<h3>About ExoneraTor</h3>\n"
+        + "</div><!-- col -->\n",
+        rb.getString("footer.abouttor.heading"),
+        String.format(rb.getString("footer.abouttor.body.text"),
+            "<a href=\"https://www.torproject.org/about/"
+            + "overview#thesolution\">"
+            + rb.getString("footer.abouttor.body.link1") + "</a>",
+            "<a href=\"https://www.torproject.org/about/overview\">"
+            + rb.getString("footer.abouttor.body.link2") + "</a>",
+            "<a href=\"https://www.torproject.org/about/contact\">"
+            + rb.getString("footer.abouttor.body.link3") + "</a>"));
+    out.printf("<div class=\"col-xs-6\">\n"
+        + "<h3>%s</h3>\n"
         + "<p class=\"small\">\n"
-        + "The ExoneraTor service maintains a database of IP addresses "
-          + "that have been part of the Tor network.\n"
-        + "It answers the question whether there was a Tor relay running "
-          + "on a given IP address on a given date.\n"
-        + "ExoneraTor may store more than one IP address per relay if "
-          + "relays use a different IP address for exiting to the "
-          + "Internet than for registering in the Tor network, and it "
-          + "stores whether a relay permitted transit of Tor traffic to "
-          + "the open Internet at that time.\n"
+        + "%s\n"
         + "</p>\n"
         + "</div><!-- col -->\n"
         + "</div><!-- row -->\n"
-        + "<div class=\"row\">\n"
-        + "<div class=\"col-xs-12\">\n"
-        + "<p class=\"text-center small\">\"Tor\" and the \"Onion Logo\" "
-          + "are <a href=\"https://www.torproject.org/docs/"
-          + "trademark-faq.html.en\">registered trademarks</a> of The "
-          + "Tor Project, Inc.</p>\n"
+        + "<div class=\"row\">\n",
+        rb.getString("footer.aboutexonerator.heading"),
+        rb.getString("footer.aboutexonerator.body"));
+    out.printf("<div class=\"col-xs-12\">\n"
+        + "<p class=\"text-center small\">%s</p>\n"
         + "</div><!-- col -->\n"
         + "</div><!-- row -->\n"
         + "</div><!-- container -->\n"
         + "</body>\n"
-        + "</html>\n");
+        + "</html>\n",
+        String.format(rb.getString("footer.trademark.text"),
+            "<a href=\"https://www.torproject.org/docs/"
+            + "trademark-faq.html.en\">"
+            + rb.getString("footer.trademark.link") + "</a>"));
     out.close();
   }
 }

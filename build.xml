@@ -2,6 +2,7 @@
 
   <!-- Define build paths. -->
   <property name="sources" value="src"/>
+  <property name="resources" value="res"/>
   <property name="classes" value="classes"/>
   <property name="config" value="etc"/>
   <property name="webxmlfile" value="${config}/web.xml"/>
@@ -68,6 +69,8 @@
           <include name="commons-lang.jar"/>
       </lib>
       <classes dir="${classes}"/>
+      <zipfileset dir="${resources}"
+                  prefix="WEB-INF/classes"/>
       <zipfileset dir="${config}"
                   prefix="WEB-INF/classes"
                   includes="logging.properties"/>
