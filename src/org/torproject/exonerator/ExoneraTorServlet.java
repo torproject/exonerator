@@ -69,7 +69,7 @@ public class ExoneraTorServlet extends HttpServlet {
     long requestedConnection = System.currentTimeMillis();
     Connection conn = this.connectToDatabase();
     if (conn == null) {
-      this.writeUnableToConnectToDatabaseWarning(out);
+      this.writeSummaryUnableToConnectToDatabase(out);
       this.writeFooter(out);
       return;
     }
@@ -78,48 +78,79 @@ public class ExoneraTorServlet extends HttpServlet {
     long[] firstAndLastDates = this.queryFirstAndLastDatesFromDatabase(
         conn);
     if (firstAndLastDates == null) {
-      this.writeNoDataWarning(out);
+      this.writeSummaryNoData(out);
       this.writeFooter(out);
       this.closeDatabaseConnection(conn, requestedConnection);
     }
+    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+    dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+    String firstDate = dateFormat.format(firstAndLastDates[0]);
+    String lastDate = dateFormat.format(firstAndLastDates[1]);
 
-    /* Parse IP parameter. */
+    /* Parse parameters. */
     String ipParameter = request.getParameter("ip");
-    StringBuilder ipWarningBuilder = new StringBuilder();
-    String relayIP = this.parseIpParameter(ipParameter, ipWarningBuilder);
+    String relayIP = this.parseIpParameter(ipParameter);
+    boolean relayIPHasError = relayIP == null;
 
     /* Parse timestamp parameter. */
     String timestampParameter = request.getParameter("timestamp");
-    StringBuilder timestampWarningBuilder = new StringBuilder();
-    String timestampStr = this.parseTimestampParameter(timestampParameter,
-        timestampWarningBuilder, firstAndLastDates);
-    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-    dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+    String timestampStr = this.parseTimestampParameter(
+        timestampParameter);
+    boolean timestampHasError = timestampStr == null;
+
+    /* Check that timestamp is within range. */
     long timestamp = 0L;
-    if (timestampStr.length() > 0) {
+    boolean timestampOutOfRange = false;
+    if (timestampStr != null && timestampStr.length() > 0) {
       try {
         timestamp = dateFormat.parse(timestampParameter).getTime();
+        if (timestamp < firstAndLastDates[0] ||
+            timestamp > firstAndLastDates[1]) {
+          timestampOutOfRange = true;
+        }
       } catch (ParseException e) {
         /* Already checked in parseTimestamp(). */
       }
     }
 
-    /* If either IP address or timestamp is provided, the other one must
-     * be provided, too. */
-    if (relayIP.length() < 1 && timestampStr.length() > 0 &&
-        ipWarningBuilder.length() < 1) {
-      ipWarningBuilder.append("Please provide an IP address.");
-    }
-    if (relayIP.length() > 0 && timestamp < 1 &&
-        timestampWarningBuilder.length() < 1) {
-      timestampWarningBuilder.append("Please provide a date.");
+    /* Write form. */
+    this.writeForm(out, relayIP, relayIPHasError ||
+        ("".equals(relayIP) && !"".equals(timestampStr)), timestampStr,
+        !relayIPHasError && (timestampHasError || timestampOutOfRange ||
+        (!"".equals(relayIP) && "".equals(timestampStr))));
+
+    /* If both parameters are empty, don't print any summary and exit.
+     * This is the start page. */
+    if ("".equals(relayIP) && "".equals(timestampStr)) {
+      this.writeFooter(out);
+      this.closeDatabaseConnection(conn, requestedConnection);
+      return;
     }
 
-    /* Write form with IP address and timestamp. */
-    this.writeForm(out, relayIP, ipWarningBuilder.toString(),
-        timestampStr, timestampWarningBuilder.toString());
+    /* If either parameter is empty, print summary with warning message
+     * and exit. */
+    if ("".equals(relayIP) || "".equals(timestampStr)) {
+      if ("".equals(relayIP)) {
+        writeSummaryNoTimestamp(out);
+      } else {
+        writeSummaryNoIp(out);
+      }
+      this.writeFooter(out);
+      this.closeDatabaseConnection(conn, requestedConnection);
+      return;
+    }
 
-    if (relayIP.length() < 1 || timestamp < 1L) {
+    /* If there's a user error, print summary with exit message and
+     * exit. */
+    if (relayIPHasError || timestampHasError || timestampOutOfRange) {
+      if (relayIPHasError) {
+        this.writeSummaryInvalidIp(out, ipParameter);
+      } else if (timestampHasError) {
+        this.writeSummaryInvalidTimestamp(out, timestampParameter);
+      } else if (timestampOutOfRange) {
+        this.writeSummaryTimestampOutsideRange(out, timestampStr,
+            firstDate, lastDate);
+      }
       this.writeFooter(out);
       this.closeDatabaseConnection(conn, requestedConnection);
       return;
@@ -129,7 +160,6 @@ public class ExoneraTorServlet extends HttpServlet {
      * date. */
     long timestampFrom = timestamp - 24L * 60L * 60L * 1000L;
     long timestampTo = timestamp + 2 * 24L * 60L * 60L * 1000L - 1L;
-    this.writeSearchInfos(out, relayIP, timestampStr);
     SimpleDateFormat validAfterTimeFormat = new SimpleDateFormat(
         "yyyy-MM-dd HH:mm:ss");
     validAfterTimeFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -139,7 +169,7 @@ public class ExoneraTorServlet extends HttpServlet {
         this.queryKnownConsensusValidAfterTimes(conn, fromValidAfter,
         toValidAfter);
     if (relevantConsensuses == null || relevantConsensuses.isEmpty()) {
-      this.writeNoDataForThisInterval(out, relayIP, timestampStr);
+      this.writeSummaryNoDataForThisInterval(out);
       this.writeFooter(out);
       this.closeDatabaseConnection(conn, requestedConnection);
       return;
@@ -151,14 +181,12 @@ public class ExoneraTorServlet extends HttpServlet {
     List<String[]> statusEntries = this.queryStatusEntries(conn, relayIP,
         timestamp, validAfterTimeFormat);
 
-    /* Print out what we found. */
-    if (!statusEntries.isEmpty()) {
-      this.writeResultsTable(out, statusEntries);
-    } else {
-      /* Run another query to find out if there are relays running on
-       * other IP addresses in the same /24 or /48 network and tell the
-       * user about it. */
-      List<String> addressesInSameNetwork = new ArrayList<String>();
+    /* If we didn't find anything, run another query to find out if there
+     * are relays running on other IP addresses in the same /24 or /48
+     * network and tell the user about it. */
+    List<String> addressesInSameNetwork = null;
+    if (statusEntries.isEmpty()) {
+      addressesInSameNetwork = new ArrayList<String>();
       if (!relayIP.contains(":")) {
         String[] relayIPParts = relayIP.split("\\.");
         byte[] address24Bytes = new byte[3];
@@ -201,24 +229,22 @@ public class ExoneraTorServlet extends HttpServlet {
               address48, timestamp);
         }
       }
-      if (addressesInSameNetwork == null ||
-          addressesInSameNetwork.isEmpty()) {
-        this.writeNoneFound(out, relayIP, timestampStr);
-      } else {
-        this.writeAddressesInSameNetwork(out, relayIP, timestampStr,
-            addressesInSameNetwork);
-      }
-      this.writeFooter(out);
-      this.closeDatabaseConnection(conn, requestedConnection);
-      return;
     }
 
     /* Print out result. */
     if (!statusEntries.isEmpty()) {
       this.writeSummaryPositive(out, relayIP, timestampStr);
+      this.writeTechnicalDetails(out, relayIP, timestampStr,
+          statusEntries);
+    } else if (addressesInSameNetwork != null &&
+        !addressesInSameNetwork.isEmpty()) {
+      this.writeSummaryAddressesInSameNetwork(out, relayIP,
+          timestampStr, addressesInSameNetwork);
     } else {
       this.writeSummaryNegative(out, relayIP, timestampStr);
     }
+
+    this.writePermanentLink(out, relayIP, timestampStr);
 
     this.closeDatabaseConnection(conn, requestedConnection);
     this.writeFooter(out);
@@ -226,17 +252,16 @@ public class ExoneraTorServlet extends HttpServlet {
 
   /* Helper methods for handling the request. */
 
-  private String parseIpParameter(String ipParameter,
-      StringBuilder ipWarningBuilder) {
-    String relayIP = "";
-    Pattern ipv4AddressPattern = Pattern.compile(
-        "^([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." +
-        "([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." +
-        "([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." +
-        "([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
-    Pattern ipv6AddressPattern = Pattern.compile(
-        "^\\[?[0-9a-fA-F:]{3,39}\\]?$");
+  private String parseIpParameter(String ipParameter) {
+    String relayIP = null;
     if (ipParameter != null && ipParameter.length() > 0) {
+      Pattern ipv4AddressPattern = Pattern.compile(
+          "^([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." +
+          "([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." +
+          "([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." +
+          "([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
+      Pattern ipv6AddressPattern = Pattern.compile(
+          "^\\[?[0-9a-fA-F:]{3,39}\\]?$");
       if (ipv4AddressPattern.matcher(ipParameter).matches()) {
         String[] ipParts = ipParameter.split("\\.");
         relayIP = Integer.parseInt(ipParts[0]) + "."
@@ -274,46 +299,24 @@ public class ExoneraTorServlet extends HttpServlet {
             relayIP = ipParameter.toLowerCase();
           }
         }
-        if (relayIP.length() < 1) {
-          ipWarningBuilder.append("\"" + (ipParameter.length() > 40 ?
-              StringEscapeUtils.escapeHtml(ipParameter.substring(0, 40))
-              + "[...]" : StringEscapeUtils.escapeHtml(ipParameter))
-              + "\" is not a valid IP address.");
-        }
-      } else {
-        ipWarningBuilder.append("\"" + (ipParameter.length() > 20 ?
-            StringEscapeUtils.escapeHtml(ipParameter.substring(0, 20))
-            + "[...]" : StringEscapeUtils.escapeHtml(ipParameter))
-            + "\" is not a valid IP address.");
       }
+    } else {
+      relayIP = "";
     }
     return relayIP;
   }
 
-  private String parseTimestampParameter(String timestampParameter,
-      StringBuilder timestampWarningBuilder, long[] firstAndLastDates) {
+  private String parseTimestampParameter(String timestampParameter) {
     String timestampStr = "";
     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
     dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+    dateFormat.setLenient(false);
     if (timestampParameter != null && timestampParameter.length() > 0) {
       try {
         long timestamp = dateFormat.parse(timestampParameter).getTime();
         timestampStr = dateFormat.format(timestamp);
-        if (timestamp < firstAndLastDates[0] ||
-            timestamp > firstAndLastDates[1]) {
-          timestampWarningBuilder.append("Please pick a date between \""
-              + dateFormat.format(firstAndLastDates[0]) + "\" and \""
-              + dateFormat.format(firstAndLastDates[1]) + "\".");
-        }
       } catch (ParseException e) {
-        /* We have no way to handle this exception, other than leaving
-           timestampStr at "". */
-        timestampWarningBuilder.append("\""
-            + (timestampParameter.length() > 20 ?
-            StringEscapeUtils.escapeHtml(timestampParameter.
-            substring(0, 20)) + "[...]" :
-            StringEscapeUtils.escapeHtml(timestampParameter))
-            + "\" is not a valid date.");
+        timestampStr = null;
       }
     }
     return timestampStr;
@@ -495,153 +498,304 @@ public class ExoneraTorServlet extends HttpServlet {
   /* Helper methods for writing the response. */
 
   private void writeHeader(PrintWriter out) throws IOException {
-    out.println("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 "
-          + "Transitional//EN\">\n"
-        + "<html>\n"
-        + "  <head>\n"
-        + "    <title>ExoneraTor</title>\n"
-        + "    <meta http-equiv=\"content-type\" content=\"text/html; "
-          + "charset=ISO-8859-1\">\n"
-        + "    <link href=\"/css/stylesheet-ltr.css\" type=\"text/css\" "
-          + "rel=\"stylesheet\">\n"
-        + "    <link href=\"/images/favicon.ico\" "
-          + "type=\"image/x-icon\" rel=\"shortcut icon\">\n"
-        + "  </head>\n"
-        + "  <body>\n"
-        + "    <div class=\"center\">\n"
-        + "      <div class=\"main-column\" style=\"margin:5; "
-          + "Padding:0;\">\n"
-        + "        <h2>ExoneraTor</h2>\n"
-        + "        <h3>or: a website that tells you whether a given IP "
-          + "address was a Tor relay</h3>\n"
-        + "        <br>\n"
-        + "        <p>Just because you see an Internet connection from a "
-          + "particular IP address does not mean you know <i>who</i> "
-          + "originated the traffic. Tor anonymizes Internet traffic by "
-          + "\"<a href=\"https://www.torproject.org/about/overview"
-          + "#thesolution\">onion routing</a>,\" sending packets "
-          + "through a series of encrypted hops before they reach their "
-          + "destination. Therefore, if you see traffic from a Tor node, "
-          + "you may be seeing traffic that originated from someone "
-          + "using Tor, rather than from the node operator itself. The "
-          + "Tor Project and Tor node operators have no records of the "
-          + "traffic that passes over the network, but we do maintain "
-          + "current and historical records of which IP addresses are "
-          + "part of the Tor network.</p>\n"
-        + "        <br>\n"
-        + "        <p>ExoneraTor tells you whether there was a Tor relay "
-          + "running on a given IP address at a given time. ExoneraTor "
-          + "learns these facts by parsing the public relay lists that "
-          + "are collected from the Tor directory authorities and the "
-          + "exit lists collected by TorDNSEL. By inputting an IP "
-          + "address and time, you can determine whether that IP was "
-          + "then a part of the Tor network.</p>\n"
-        + "        <br>\n"
-        + "        <p><font color=\"red\"><b>Notice:</b> Note that the "
-          + "information you are providing below may be visible to "
-          + "anyone who can read the network traffic between you and "
-          + "this web server or who has access to this web "
-          + "server.</font></p>\n"
-        + "        <br>\n");
-  }
-
-  private void writeUnableToConnectToDatabaseWarning(PrintWriter out)
-      throws IOException {
-    out.println("<p><font color=\"red\"><b>Warning: </b></font>Unable "
-        + "to connect to the database. If this problem persists, "
-        + "please <a href=\"mailto:tor-assistants@torproject.org\">let "
-        + "us know</a>!</p>\n");
-  }
-
-  private void writeNoDataWarning(PrintWriter out) throws IOException {
-    out.println("<p><font color=\"red\"><b>Warning: </b></font>This "
-        + "server doesn't have any relay lists available. If this "
-        + "problem persists, please "
-        + "<a href=\"mailto:tor-assistants@lists.torproject.org\">let "
-        + "us know</a>!</p>\n");
+    out.println("<!DOCTYPE html>\n"
+        + "<html lang=\"en\">\n"
+        + "<head>\n"
+        + "<meta charset=\"utf-8\">\n"
+        + "<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">\n"
+        + "<meta name=\"viewport\" content=\"width=device-width, "
+          + "initial-scale=1\">\n"
+        + "<title>ExoneraTor</title>\n"
+        + "<link rel=\"stylesheet\" href=\"css/bootstrap.min.css\">\n"
+        + "<link href=\"images/favicon.ico\" type=\"image/x-icon\" "
+          + "rel=\"icon\">\n"
+        + "</head>\n"
+        + "<body>\n"
+        + "<div class=\"container\">\n"
+        + "<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<div class=\"page-header\">\n"
+        + "<h1><a href=\"/\">ExoneraTor</a></h1>\n"
+        + "</div><!-- page-header -->\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n");
   }
 
   private void writeForm(PrintWriter out, String relayIP,
-      String ipWarning, String timestampStr, String timestampWarning)
+      boolean relayIPHasError, String timestampStr,
+      boolean timestampHasError) throws IOException {
+    out.printf("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<div class=\"text-center\">\n"
+        + "<form class=\"form-inline\">\n"
+        + "<div class=\"form-group%s\">\n"
+        + "<label for=\"inputIp\" class=\"control-label\">IP "
+          + "address</label>\n"
+        + "<input type=\"text\" class=\"form-control\" name=\"ip\" "
+          + "id=\"inputIp\" placeholder=\"86.59.21.38\"%s required>\n"
+        + "</div><!-- form-group -->\n"
+        + "<div class=\"form-group%s\">\n"
+        + "<label for=\"inputTimestamp\" "
+          + "class=\"control-label\">Date</label>\n"
+        + "<input type=\"date\" class=\"form-control\" "
+          + "name=\"timestamp\" id=\"inputTimestamp\" "
+          + "placeholder=\"2010-01-01\"%s required>\n"
+        + "</div><!-- form-group -->\n"
+        + "<button type=\"submit\" "
+          + "class=\"btn btn-primary\">Search</button>\n"
+        + "</form>\n"
+        + "</div><!-- text-center -->\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n",
+        relayIPHasError ? " has-error" : "",
+        relayIP != null && relayIP.length() > 0 ?
+            " value=\"" + relayIP + "\"" : "",
+        timestampHasError ? " has-error" : "",
+        timestampStr != null && timestampStr.length() > 0 ?
+            " value=\"" + timestampStr + "\"" : "");
+  }
+
+  private void writeSummaryUnableToConnectToDatabase(PrintWriter out)
       throws IOException {
-    out.println("<a name=\"relay\"></a><h3>Was there a Tor relay running "
-        + "on this IP address?</h3>");
-    out.println("        <form action=\"#relay\">\n"
-        + "          <table>\n"
-        + "            <tr>\n"
-        + "              <td align=\"right\">IP address in question:"
-          + "</td>\n"
-        + "              <td><input type=\"text\" name=\"ip\" size=\"30\""
-          + (relayIP.length() > 0 ? " value=\"" + relayIP + "\""
-            : "")
-          + ">"
-          + (ipWarning.length() > 0 ? "<br><font color=\"red\">"
-          + ipWarning + "</font>" : "")
-        + "</td>\n"
-        + "              <td><i>(Ex.: 86.59.21.38 or "
-          + "2001:858:2:2:aabb:0:563b:1526)</i></td>\n"
-        + "            </tr>\n"
-        + "            <tr>\n"
-        + "              <td align=\"right\">Date:</td>\n"
-        + "              <td><input type=\"text\" name=\"timestamp\""
-          + " size=\"30\""
-          + (timestampStr.length() > 0 ? " value=\"" + timestampStr + "\""
-            : "")
-          + ">"
-          + (timestampWarning.length() > 0 ? "<br><font color=\"red\">"
-              + timestampWarning + "</font>" : "")
-        + "</td>\n"
-        + "              <td><i>(Ex.: 2010-01-01)"
-          + "</i></td>\n"
-        + "            </tr>\n"
-        + "            <tr>\n"
-        + "              <td></td>\n"
-        + "              <td>\n"
-        + "                <input type=\"submit\">\n"
-        + "                <input type=\"reset\">\n"
-        + "              </td>\n"
-        + "              <td></td>\n"
-        + "            </tr>\n"
-        + "          </table>\n"
-        + "        </form>\n");
+    out.print("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<h2>Summary</h2>\n"
+        + "<div class=\"panel panel-danger\">\n"
+        + "<div class=\"panel-heading\">\n"
+        + "<h3 class=\"panel-title\">Server problem</h3>\n"
+        + "</div><!-- panel-heading -->\n"
+        + "<div class=\"panel-body\">\n"
+        + "Unable to connect to the database.\n"
+        + "Please try again later.\n"
+        + "If this problem persists, please <a "
+          + "href=\"https://www.torproject.org/about/contact\">let us "
+          + "know</a>!\n"
+        + "</div><!-- panel-body -->\n"
+        + "</div><!-- panel -->\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n");
   }
 
-  private void writeSearchInfos(PrintWriter out, String relayIP,
+  private void writeSummaryNoData(PrintWriter out) throws IOException {
+    out.print("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<h2>Summary</h2>\n"
+        + "<div class=\"panel panel-danger\">\n"
+        + "<div class=\"panel-heading\">\n"
+        + "<h3 class=\"panel-title\">Server problem</h3>\n"
+        + "</div><!-- panel-heading -->\n"
+        + "<div class=\"panel-body\">\n"
+        + "The database appears to be empty.\n"
+        + "Please try again later.\n"
+        + "If this problem persists, please <a "
+          + "href=\"https://www.torproject.org/about/contact\">let us "
+          + "know</a>!\n"
+        + "</div><!-- panel-body -->\n"
+        + "</div><!-- panel -->\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n");
+  }
+
+  private void writeSummaryNoTimestamp(PrintWriter out) throws IOException {
+    out.printf("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<h2>Summary</h2>\n"
+        + "<div class=\"panel panel-danger\">\n"
+        + "<div class=\"panel-heading\">\n"
+        + "<h3 class=\"panel-title\">No date parameter given</h3>\n"
+        + "</div><!-- panel-heading -->\n"
+        + "<div class=\"panel-body\">\n"
+        + "<p>Sorry, you also need to provide a date parameter.</p>\n"
+        + "</div><!-- panel-body -->\n"
+        + "</div><!-- panel -->\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n");
+  }
+
+  private void writeSummaryNoIp(PrintWriter out) throws IOException {
+    out.printf("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<h2>Summary</h2>\n"
+        + "<div class=\"panel panel-danger\">\n"
+        + "<div class=\"panel-heading\">\n"
+        + "<h3 class=\"panel-title\">No IP address parameter given</h3>\n"
+        + "</div><!-- panel-heading -->\n"
+        + "<div class=\"panel-body\">\n"
+        + "<p>Sorry, you also need to provide an IP address "
+          + "parameter.</p>\n"
+        + "</div><!-- panel-body -->\n"
+        + "</div><!-- panel -->\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n");
+  }
+
+  private void writeSummaryTimestampOutsideRange(PrintWriter out,
+      String timestampStr, String firstDate, String lastDate)
+      throws IOException {
+    out.printf("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<h2>Summary</h2>\n"
+        + "<div class=\"panel panel-danger\">\n"
+        + "<div class=\"panel-heading\">\n"
+        + "<h3 class=\"panel-title\">Date parameter out of range</h3>\n"
+        + "</div><!-- panel-heading -->\n"
+        + "<div class=\"panel-body\">\n"
+        + "<p>Sorry, the database does not contain any data from %s.\n"
+        + "Please pick a date between %s and %s.</p>\n"
+        + "</div><!-- panel-body -->\n"
+        + "</div><!-- panel -->\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n", timestampStr, firstDate, lastDate);
+  }
+
+  private void writeSummaryInvalidIp(PrintWriter out, String ipParameter)
+      throws IOException {
+    out.printf("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<h2>Summary</h2>\n"
+        + "<div class=\"panel panel-danger\">\n"
+        + "<div class=\"panel-heading\">\n"
+        + "<h3 class=\"panel-title\">Invalid IP address parameter</h3>\n"
+        + "</div><!-- panel-heading -->\n"
+        + "<div class=\"panel-body\">\n"
+        + "<p>Sorry, \"%s\" is not a valid IP address.\n"
+        + "The expected IP address formats are \"a.b.c.d\" or "
+          + "\"[a:b:c::d]\".</p>\n"
+        + "</div><!-- panel-body -->\n"
+        + "</div><!-- panel -->\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n",
+        ipParameter.length() > 40 ?
+        StringEscapeUtils.escapeHtml(ipParameter.substring(0, 40))
+        + "[...]" : StringEscapeUtils.escapeHtml(ipParameter));
+  }
+
+  private void writeSummaryInvalidTimestamp(PrintWriter out,
+      String timestampParameter) throws IOException {
+    out.printf("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<h2>Summary</h2>\n"
+        + "<div class=\"panel panel-danger\">\n"
+        + "<div class=\"panel-heading\">\n"
+        + "<h3 class=\"panel-title\">Invalid date parameter</h3>\n"
+        + "</div><!-- panel-heading -->\n"
+        + "<div class=\"panel-body\">\n"
+        + "<p>Sorry, \"%s\" is not a valid date.\n"
+        + "The expected date format is \"YYYY-MM-DD\".\n"
+        + "</div><!-- panel-body -->\n"
+        + "</div><!-- panel -->\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n",
+        timestampParameter.length() > 20 ?
+        StringEscapeUtils.escapeHtml(timestampParameter.
+        substring(0, 20)) + "[...]" :
+        StringEscapeUtils.escapeHtml(timestampParameter));
+  }
+
+  private void writeSummaryNoDataForThisInterval(PrintWriter out)
+      throws IOException {
+    out.print("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<h2>Summary</h2>\n"
+        + "<div class=\"panel panel-danger\">\n"
+        + "<div class=\"panel-heading\">\n"
+        + "<h3 class=\"panel-title\">Server problem</h3>\n"
+        + "</div><!-- panel-heading -->\n"
+        + "<div class=\"panel-body\">\n"
+        + "The database does not contain any data for the requested "
+          + "date.\n"
+        + "Please try again later.\n"
+        + "If this problem persists, please <a "
+          + "href=\"https://www.torproject.org/about/contact\">let us "
+          + "know</a>!\n"
+        + "</div><!-- panel-body -->\n"
+        + "</div><!-- panel -->\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n");
+  }
+
+  private void writeSummaryAddressesInSameNetwork(PrintWriter out,
+      String relayIP, String timestampStr,
+      List<String> addressesInSameNetwork) throws IOException {
+    out.printf("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<h2>Summary</h2>\n"
+        + "<div class=\"panel panel-warning\">\n"
+        + "<div class=\"panel-heading\">\n"
+        + "<h3 class=\"panel-title\">Result is negative</h3>\n"
+        + "</div><!-- panel-heading -->\n"
+        + "<div class=\"panel-body\">\n"
+        + "<p>We did not find IP address %s on or within a day of %s.\n"
+        + "But we did find other IP addresses of Tor relays in the same "
+          + "/%d network around the time:</p>\n"
+        + "<ul>\n", relayIP, timestampStr,
+        relayIP.contains(":") ? 48 : 24);
+    for (String s : addressesInSameNetwork) {
+      out.printf("<li><a href=\"/?ip=%s&timestamp=%s\">%s</a></li>\n",
+          s.contains(":") ? "[" + s.replaceAll(":", "%3A") + "]" : s,
+          timestampStr, s);
+    }
+    out.print("</ul>\n"
+        + "</div><!-- panel-body -->\n"
+        + "</div><!-- panel -->\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n");
+  }
+
+  private void writeSummaryPositive(PrintWriter out, String relayIP,
       String timestampStr) throws IOException {
-    out.printf("<p>Looking up IP address %s in the relay lists "
-        + "published ", relayIP);
-    out.printf("on or within a day of %s", timestampStr);
-    out.print(" as well as in the relevant exit lists. Clients could "
-        + "have selected any of these relays to build circuits. "
-        + "You may follow the links to relay lists and relay descriptors "
-        + "to grep for the lines printed below and confirm that results "
-        + "are correct.<br>\n");
+    out.printf("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<h2>Summary</h2>\n"
+        + "<div class=\"panel panel-success\">\n"
+        + "<div class=\"panel-heading\">\n"
+        + "<h3 class=\"panel-title\">Result is positive</h3>\n"
+        + "</div><!-- panel-heading -->\n"
+        + "<div class=\"panel-body\">\n"
+        + "We found one or more Tor relays on IP address %s on or within "
+          + "a day of %s that Tor clients were likely to know.\n"
+        + "</div><!-- panel-body -->\n"
+        + "</div><!-- panel -->\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n", relayIP, timestampStr);
   }
 
-  private void writeNoDataForThisInterval(PrintWriter out, String relayIP,
+  private void writeSummaryNegative(PrintWriter out, String relayIP,
       String timestampStr) throws IOException {
-    out.println("        <p>No relay lists found!</p>\n"
-        + "        <p>Result is INDECISIVE!</p>\n"
-        + "        <p>We cannot make any statement whether there was "
-        + "a Tor relay running on IP address " + relayIP + " on "
-        + timestampStr + "! We "
-        + "did not find any relevant relay lists on or within a day of "
-        + "the given date. If "
-        + "you think this is an error on our side, please "
-        + "<a href=\"mailto:tor-assistants@torproject.org\">contact "
-        + "us</a>!</p>\n");
+    out.printf("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<h2>Summary</h2>\n"
+        + "<div class=\"panel panel-warning\">\n"
+        + "<div class=\"panel-heading\">\n"
+        + "<h3 class=\"panel-title\">Result is negative</h3>\n"
+        + "</div><!-- panel-heading -->\n"
+        + "<div class=\"panel-body\">\n"
+        + "We did not find IP address %s on or within a day of %s.\n"
+        + "</div><!-- panel-body -->\n"
+        + "</div><!-- panel -->\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n", relayIP, timestampStr);
   }
 
-  private void writeResultsTable(PrintWriter out,
-      List<String[]> tableRows) throws IOException {
-    out.print("<br>\n");
-    out.print("<table>\n");
-    out.print("<thead>\n");
-    out.print("<tr><th>Timestamp (UTC)</th><th>IP address(es)</th>"
-        + "<th>Identity fingerprint</th><th>Nickname</th><th>Exit</th>"
-        + "</tr>\n");
-    out.print("</thead>\n");
-    out.print("<tbody>\n");
+  private void writeTechnicalDetails(PrintWriter out, String relayIP,
+      String timestampStr, List<String[]> tableRows) throws IOException {
+    out.printf("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<h2>Technical details</h2>\n"
+        + "<p>Looking up IP address %s on or within one day of %s. Tor "
+          + "clients could have selected this or these Tor relays to "
+          + "build circuits.</p>\n"
+        + "<table class=\"table\">\n"
+        + "<thead>\n"
+        + "<tr>\n"
+        + "<th>Timestamp (UTC)</th>\n"
+        + "<th>IP address(es)</th>\n"
+        + "<th>Identity fingerprint</th>\n"
+        + "<th>Nickname</th>\n"
+        + "<th>Exit</th>\n"
+        + "</tr>\n"
+        + "</thead>\n"
+        + "<tbody>\n", relayIP, timestampStr);
     for (String[] tableRow : tableRows) {
       out.print("<tr>");
       for (String tableColumn : tableRow) {
@@ -649,81 +803,73 @@ public class ExoneraTorServlet extends HttpServlet {
       }
       out.print("</tr>\n");
     }
-    out.print("</tbody>\n");
-    out.print("</table>\n");
+    out.print("</tr>\n"
+        + "</tbody>\n"
+        + "</table>\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n");
   }
 
-  private void writeNoneFound(PrintWriter out, String relayIP,
+  private void writePermanentLink(PrintWriter out, String relayIP,
       String timestampStr) throws IOException {
-    out.printf("        <p>None found!</p>\n"
-        + "        <p>Result is NEGATIVE with high certainty!</p>\n"
-        + "        <p>We did not find IP "
-        + "address " + relayIP + " in any of the relay or exit lists "
-        + "that were published on or within a day of %s.</p>\n",
-        timestampStr);
-  }
-
-  private void writeAddressesInSameNetwork(PrintWriter out,
-      String relayIP, String timestampStr,
-      List<String> addressesInSameNetwork) throws IOException {
-    out.printf("        <p>None found!</p>\n"
-        + "        <p>Result is NEGATIVE with high certainty!</p>\n"
-        + "        <p>We did not find IP "
-        + "address " + relayIP + " in any of the relay or exit lists "
-        + "that were published on or within a day of %s.</p>\n",
-        timestampStr);
-    if (!relayIP.contains(":")) {
-      out.print("        <p>The following other IP addresses of Tor "
-          + "relays in the same /24 network were found in relay "
-          + "and/or exit lists on or within a day of " + timestampStr
-          + " that could be related "
-          + "to IP address " + relayIP + ":</p>\n");
-    } else {
-      out.print("        <p>The following other IP addresses of Tor "
-          + "relays in the same /48 network were found in relay "
-          + "lists on or within a day of " + timestampStr
-          + " that could be related to IP "
-          + "address " + relayIP + ":</p>\n");
-    }
-    out.print("        <ul>\n");
-    for (String s : addressesInSameNetwork) {
-      out.print("        <li>" + s + "</li>\n");
-    }
-    out.print("        </ul>\n");
-  }
-
-  private void writeSummaryPositive(PrintWriter out, String relayIP,
-      String timestampStr) throws IOException {
-    out.print("        <p>Result is POSITIVE with high certainty!"
-        + "</p>\n"
-        + "        <p>We found one or more relays on IP address "
-        + relayIP + " in a ");
-    out.print("relay list published on or within a day of "
-        + timestampStr);
-    out.print(" that clients were likely to know.</p>\n");
-  }
-
-  private void writeSummaryNegative(PrintWriter out, String relayIP,
-      String timestampStr) throws IOException {
-    out.println("        <p>Result is NEGATIVE "
-        + "with high certainty!</p>\n");
-    out.println("        <p>We did not find any relay on IP address "
-        + relayIP
-        + " in the relay lists on or within a day of " + timestampStr
-        + ".</p>\n");
+    String encodedAddress = relayIP.contains(":") ?
+        "[" + relayIP.replaceAll(":", "%3A") + "]" : relayIP;
+    out.printf("<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<h2>Permanent link</h2>\n"
+        + "<pre>https://exonerator.torproject.org/?ip=%s&amp;"
+          + "timestamp=%s</pre>\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n", encodedAddress, timestampStr);
   }
 
   private void writeFooter(PrintWriter out) throws IOException {
-    out.println("        <br>\n"
-        + "      </div>\n"
-        + "    </div>\n"
-        + "    <div class=\"bottom\" id=\"bottom\">\n"
-        + "      <p>\"Tor\" and the \"Onion Logo\" are <a "
-          + "href=\"https://www.torproject.org/docs/trademark-faq.html.en"
-          + "\">registered trademarks</a> of The Tor Project, Inc.</p>\n"
-        + "    </div>\n"
-        + "  </body>\n"
-        + "</html>");
+    out.println("<div class=\"row\">\n"
+        + "<div class=\"col-xs-6\">\n"
+        + "<h3>About Tor</h3>\n"
+        + "<p class=\"small\">\n"
+        + "Tor anonymizes Internet traffic by <a "
+          + "href=\"https://www.torproject.org/about/"
+          + "overview#thesolution\">sending packets through a series of "
+          + "encrypted hops before they reach their destination</a>.\n"
+        + "Therefore, if you see traffic from a Tor relay, you may be "
+          + "seeing traffic that originated from someone using Tor, "
+          + "rather than from the relay operator.\n"
+        + "The Tor Project and Tor relay operators have no records of "
+          + "the traffic that passes over the network.\n"
+        + "Be sure to <a "
+          + "href=\"https://www.torproject.org/about/overview\">learn "
+          + "more about Tor</a>, and don't hesitate to <a "
+          + "href=\"https://www.torproject.org/about/contact\">contact "
+          + "The Tor Project</a> for more information.\n"
+        + "</p>\n"
+        + "</div><!-- col -->\n"
+        + "<div class=\"col-xs-6\">\n"
+        + "<h3>About ExoneraTor</h3>\n"
+        + "<p class=\"small\">\n"
+        + "The ExoneraTor service maintains a database of IP addresses "
+          + "that have been part of the Tor network.\n"
+        + "It answers the question whether there was a Tor relay running "
+          + "on a given IP address on a given date.\n"
+        + "ExoneraTor may store more than one IP address per relay if "
+          + "relays use a different IP address for exiting to the "
+          + "Internet than for registering in the Tor network, and it "
+          + "stores whether a relay permitted transit of Tor traffic to "
+          + "the open Internet at that time.\n"
+        + "</p>\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n"
+        + "<div class=\"row\">\n"
+        + "<div class=\"col-xs-12\">\n"
+        + "<p class=\"text-center small\">\"Tor\" and the \"Onion Logo\" "
+          + "are <a href=\"https://www.torproject.org/docs/"
+          + "trademark-faq.html.en\">registered trademarks</a> of The "
+          + "Tor Project, Inc.</p>\n"
+        + "</div><!-- col -->\n"
+        + "</div><!-- row -->\n"
+        + "</div><!-- container -->\n"
+        + "</body>\n"
+        + "</html>\n");
     out.close();
   }
 }
