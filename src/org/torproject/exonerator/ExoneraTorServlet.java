@@ -131,9 +131,9 @@ public class ExoneraTorServlet extends HttpServlet {
      * and exit. */
     if ("".equals(relayIP) || "".equals(timestampStr)) {
       if ("".equals(relayIP)) {
-        writeSummaryNoTimestamp(out);
-      } else {
         writeSummaryNoIp(out);
+      } else {
+        writeSummaryNoTimestamp(out);
       }
       this.writeFooter(out);
       this.closeDatabaseConnection(conn, requestedConnection);
