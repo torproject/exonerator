@@ -769,7 +769,10 @@ public class ExoneraTorServlet extends HttpServlet {
       out.print("<tr>");
       for (int i = 0; i < tableRow.length; i++) {
         String content = tableRow[i];
-        if (i == 3 && content == null) {
+        if (i == 2) {
+          content = content.substring(0, 20) + "&#8203;"
+              + content.substring(20, 40);
+        } else if (i == 3 && content == null) {
           content = "("
               + rb.getString("technicaldetails.nickname.unknown") + ")";
         } else if (i == 4) {
