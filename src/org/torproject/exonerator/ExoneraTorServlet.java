@@ -260,9 +260,10 @@ public class ExoneraTorServlet extends HttpServlet {
 
   /* Helper methods for handling the request. */
 
-  private String parseIpParameter(String ipParameter) {
+  private String parseIpParameter(String passedIpParameter) {
     String relayIP = null;
-    if (ipParameter != null && ipParameter.length() > 0) {
+    if (passedIpParameter != null && passedIpParameter.length() > 0) {
+      String ipParameter = passedIpParameter.trim();
       Pattern ipv4AddressPattern = Pattern.compile(
           "^([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." +
           "([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." +
@@ -314,12 +315,15 @@ public class ExoneraTorServlet extends HttpServlet {
     return relayIP;
   }
 
-  private String parseTimestampParameter(String timestampParameter) {
+  private String parseTimestampParameter(
+      String passedTimestampParameter) {
     String timestampStr = "";
     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
     dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
     dateFormat.setLenient(false);
-    if (timestampParameter != null && timestampParameter.length() > 0) {
+    if (passedTimestampParameter != null &&
+        passedTimestampParameter.length() > 0) {
+      String timestampParameter = passedTimestampParameter.trim();
       try {
         long timestamp = dateFormat.parse(timestampParameter).getTime();
         timestampStr = dateFormat.format(timestamp);
@@ -696,7 +700,8 @@ public class ExoneraTorServlet extends HttpServlet {
         + "</div><!-- row -->\n",
         rb.getString("summary.heading"),
         rb.getString("summary.invalidparams.invalidip.title"),
-        String.format("summary.invalidparams.invalidip.body",
+        String.format(
+            rb.getString("summary.invalidparams.invalidip.body"),
             escapedIpParameter, "\"a.b.c.d\"", "\"[a:b:c:d:e:f:g:h]\""));
   }
 
@@ -721,7 +726,8 @@ public class ExoneraTorServlet extends HttpServlet {
         + "</div><!-- row -->\n",
         rb.getString("summary.heading"),
         rb.getString("summary.invalidparams.invalidtimestamp.title"),
-        String.format("summary.invalidparams.invalidtimestamp.body",
+        String.format(
+            rb.getString("summary.invalidparams.invalidtimestamp.body"),
             escapedTimestampParameter, "\"YYYY-MM-DD\""));
   }
 
