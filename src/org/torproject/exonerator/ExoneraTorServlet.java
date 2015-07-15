@@ -536,6 +536,14 @@ public class ExoneraTorServlet extends HttpServlet {
   private void writeForm(PrintWriter out, ResourceBundle rb,
       String relayIP, boolean relayIPHasError, String timestampStr,
       boolean timestampHasError) throws IOException {
+    String ipValue = "";
+    if (relayIP != null && relayIP.length() > 0) {
+      if (relayIP.contains(":")) {
+        ipValue = String.format(" value=\"[%s]\"", relayIP);
+      } else {
+        ipValue = String.format(" value=\"%s\"", relayIP);
+      }
+    }
     out.printf("<div class=\"row\">\n"
         + "<div class=\"col-xs-12\">\n"
         + "<div class=\"text-center\">\n"
@@ -560,8 +568,7 @@ public class ExoneraTorServlet extends HttpServlet {
         + "</div><!-- row -->\n",
         relayIPHasError ? " has-error" : "",
         rb.getString("form.ip.label"),
-        relayIP != null && relayIP.length() > 0 ?
-            " value=\"" + relayIP + "\"" : "",
+        ipValue,
         timestampHasError ? " has-error" : "",
         rb.getString("form.timestamp.label"),
         timestampStr != null && timestampStr.length() > 0 ?
@@ -664,12 +671,17 @@ public class ExoneraTorServlet extends HttpServlet {
     Object[][] panelItems = new Object[addressesInSameNetwork.size()][];
     for (int i = 0; i < addressesInSameNetwork.size(); i++) {
       String addressInSameNetwork = addressesInSameNetwork.get(i);
-      String link = String.format("/?ip=%s&timestamp=%s",
-          addressInSameNetwork.contains(":")
-          ? "[" + addressInSameNetwork.replaceAll(":", "%3A") + "]" 
-          : addressInSameNetwork,
-          timestampStr);
-      panelItems[i] = new Object[] { link, addressInSameNetwork };
+      String link, address;
+      if (addressInSameNetwork.contains(":")) {
+        link = String.format("/?ip=[%s]&timestamp=%s",
+            addressInSameNetwork.replaceAll(":", "%3A"), timestampStr);
+        address = "[" + addressInSameNetwork + "]";
+      } else {
+        link = String.format("/?ip=%s&timestamp=%s",
+            addressInSameNetwork, timestampStr);
+        address = addressInSameNetwork;
+      }
+      panelItems[i] = new Object[] { link, address };
     }
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-warning",
@@ -680,16 +692,22 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private void writeSummaryPositive(PrintWriter out, ResourceBundle rb,
       String relayIP, String timestampStr) throws IOException {
+    String formattedRelayIP = relayIP.contains(":") ?
+        "[" + relayIP + "]" : relayIP;
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-success", rb.getString("summary.positive.title"), null,
-        rb.getString("summary.positive.body"), relayIP, timestampStr);
+        rb.getString("summary.positive.body"), formattedRelayIP,
+        timestampStr);
   }
 
   private void writeSummaryNegative(PrintWriter out, ResourceBundle rb,
       String relayIP, String timestampStr) throws IOException {
+    String formattedRelayIP = relayIP.contains(":") ?
+        "[" + relayIP + "]" : relayIP;
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-warning", rb.getString("summary.negative.title"), null,
-        rb.getString("summary.negative.body"), relayIP, timestampStr);
+        rb.getString("summary.negative.body"), formattedRelayIP,
+        timestampStr);
   }
 
   private void writeSummary(PrintWriter out, String heading,
@@ -722,6 +740,8 @@ public class ExoneraTorServlet extends HttpServlet {
   private void writeTechnicalDetails(PrintWriter out, ResourceBundle rb,
       String relayIP, String timestampStr, List<String[]> tableRows)
       throws IOException {
+    String formattedRelayIP = relayIP.contains(":") ?
+        "[" + relayIP + "]" : relayIP;
     out.printf("<div class=\"row\">\n"
         + "<div class=\"col-xs-12\">\n"
         + "<h2>%s</h2>\n"
@@ -739,7 +759,7 @@ public class ExoneraTorServlet extends HttpServlet {
         + "<tbody>\n",
         rb.getString("technicaldetails.heading"),
         String.format(rb.getString("technicaldetails.pre"),
-            relayIP, timestampStr),
+            formattedRelayIP, timestampStr),
         rb.getString("technicaldetails.colheader.timestamp"),
         rb.getString("technicaldetails.colheader.ip"),
         rb.getString("technicaldetails.colheader.fingerprint"),
