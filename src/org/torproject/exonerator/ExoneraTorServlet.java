@@ -512,26 +512,27 @@ public class ExoneraTorServlet extends HttpServlet {
   private void writeHeader(PrintWriter out) throws IOException {
     out.println("<!DOCTYPE html>\n"
         + "<html lang=\"en\">\n"
-        + "<head>\n"
-        + "<meta charset=\"utf-8\">\n"
-        + "<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">\n"
-        + "<meta name=\"viewport\" content=\"width=device-width, "
+        + "  <head>\n"
+        + "    <meta charset=\"utf-8\">\n"
+        + "    <meta http-equiv=\"X-UA-Compatible\" "
+          + "content=\"IE=edge\">\n"
+        + "    <meta name=\"viewport\" content=\"width=device-width, "
           + "initial-scale=1\">\n"
-        + "<title>ExoneraTor</title>\n"
-        + "<link rel=\"stylesheet\" href=\"css/bootstrap.min.css\">\n"
-        + "<link rel=\"stylesheet\" href=\"css/exonerator.css\">\n"
-        + "<link href=\"images/favicon.ico\" type=\"image/x-icon\" "
+        + "    <title>ExoneraTor</title>\n"
+        + "    <link rel=\"stylesheet\" href=\"css/bootstrap.min.css\">\n"
+        + "    <link rel=\"stylesheet\" href=\"css/exonerator.css\">\n"
+        + "    <link href=\"images/favicon.ico\" type=\"image/x-icon\" "
           + "rel=\"icon\">\n"
-        + "</head>\n"
-        + "<body>\n"
-        + "<div class=\"container\">\n"
-        + "<div class=\"row\">\n"
-        + "<div class=\"col-xs-12\">\n"
-        + "<div class=\"page-header\">\n"
-        + "<h1><a href=\"/\">ExoneraTor</a></h1>\n"
-        + "</div><!-- page-header -->\n"
-        + "</div><!-- col -->\n"
-        + "</div><!-- row -->\n");
+        + "  </head>\n"
+        + "  <body>\n"
+        + "    <div class=\"container\">\n"
+        + "      <div class=\"row\">\n"
+        + "        <div class=\"col-xs-12\">\n"
+        + "          <div class=\"page-header\">\n"
+        + "            <h1><a href=\"/\">ExoneraTor</a></h1>\n"
+        + "          </div><!-- page-header -->\n"
+        + "        </div><!-- col -->\n"
+        + "      </div><!-- row -->\n");
   }
 
   private void writeForm(PrintWriter out, ResourceBundle rb,
@@ -545,31 +546,33 @@ public class ExoneraTorServlet extends HttpServlet {
         ipValue = String.format(" value=\"%s\"", relayIP);
       }
     }
-    out.printf("<div class=\"row\">\n"
-        + "<div class=\"col-xs-12\">\n"
-        + "<div class=\"text-center\">\n"
-        + "<div class=\"row vbottom15\">\n"
-        + "<h4>%s</h4>\n"
-        + "</div> <!-- row -->\n"
-        + "<form class=\"form-inline\">\n"
-        + "<div class=\"form-group%s\">\n"
-        + "<label for=\"inputIp\" class=\"control-label\">%s</label>\n"
-        + "<input type=\"text\" class=\"form-control\" name=\"ip\" "
-          + "id=\"inputIp\" placeholder=\"86.59.21.38\"%s required>\n"
-        + "</div><!-- form-group -->\n"
-        + "<div class=\"form-group%s\">\n"
-        + "<label for=\"inputTimestamp\" "
+    out.printf("      <div class=\"row\">\n"
+        + "        <div class=\"col-xs-12\">\n"
+        + "          <div class=\"text-center\">\n"
+        + "            <div class=\"row vbottom15\">\n"
+        + "              <h4>%s</h4>\n"
+        + "            </div> <!-- row -->\n"
+        + "            <form class=\"form-inline\">\n"
+        + "              <div class=\"form-group%s\">\n"
+        + "                <label for=\"inputIp\" "
           + "class=\"control-label\">%s</label>\n"
-        + "<input type=\"date\" class=\"form-control\" "
+        + "                <input type=\"text\" class=\"form-control\" "
+          + "name=\"ip\" id=\"inputIp\" placeholder=\"86.59.21.38\"%s "
+          + "required>\n"
+        + "              </div><!-- form-group -->\n"
+        + "              <div class=\"form-group%s\">\n"
+        + "                <label for=\"inputTimestamp\" "
+          + "class=\"control-label\">%s</label>\n"
+        + "                <input type=\"date\" class=\"form-control\" "
           + "name=\"timestamp\" id=\"inputTimestamp\" "
           + "placeholder=\"2010-01-01\"%s required>\n"
-        + "</div><!-- form-group -->\n"
-        + "<button type=\"submit\" "
+        + "              </div><!-- form-group -->\n"
+        + "              <button type=\"submit\" "
           + "class=\"btn btn-primary\">%s</button>\n"
-        + "</form>\n"
-        + "</div><!-- text-center -->\n"
-        + "</div><!-- col -->\n"
-        + "</div><!-- row -->\n",
+        + "            </form>\n"
+        + "          </div><!-- text-center -->\n"
+        + "        </div><!-- col -->\n"
+        + "      </div><!-- row -->\n",
         rb.getString("form.explanation"),
         relayIPHasError ? " has-error" : "",
         rb.getString("form.ip.label"),
@@ -719,27 +722,28 @@ public class ExoneraTorServlet extends HttpServlet {
       String panelContext, String panelTitle, Object[][] panelItems,
       String panelBodyTemplate, Object... panelBodyArgs)
       throws IOException {
-    out.printf("<div class=\"row\">\n"
-        + "<div class=\"col-xs-12\">\n"
-        + "<h2>%s</h2>\n"
-        + "<div class=\"panel %s\">\n"
-        + "<div class=\"panel-heading\">\n"
-        + "<h3 class=\"panel-title\">%s</h3>\n"
-        + "</div><!-- panel-heading -->\n"
-        + "<div class=\"panel-body\">\n"
-        + "<p>%s</p>\n", heading, panelContext, panelTitle,
+    out.printf("      <div class=\"row\">\n"
+        + "        <div class=\"col-xs-12\">\n"
+        + "          <h2>%s</h2>\n"
+        + "          <div class=\"panel %s\">\n"
+        + "            <div class=\"panel-heading\">\n"
+        + "              <h3 class=\"panel-title\">%s</h3>\n"
+        + "            </div><!-- panel-heading -->\n"
+        + "            <div class=\"panel-body\">\n"
+        + "              <p>%s</p>\n", heading, panelContext, panelTitle,
         String.format(panelBodyTemplate, panelBodyArgs));
     if (panelItems != null) {
-      out.print("<ul>\n");
+      out.print("              <ul>\n");
       for (Object[] panelItem : panelItems) {
-        out.printf("<li><a href=\"%s\">%s</a></li>\n", panelItem);
+        out.printf("                <li><a href=\"%s\">%s</a></li>\n",
+            panelItem);
       }
-      out.print("</ul>\n");
+      out.print("              </ul>\n");
     }
-    out.print("</div><!-- panel-body -->\n"
-        + "</div><!-- panel -->\n"
-        + "</div><!-- col -->\n"
-        + "</div><!-- row -->\n");
+    out.print("            </div><!-- panel-body -->\n"
+        + "          </div><!-- panel -->\n"
+        + "        </div><!-- col -->\n"
+        + "      </div><!-- row -->\n");
   }
 
   private void writeTechnicalDetails(PrintWriter out, ResourceBundle rb,
@@ -747,21 +751,21 @@ public class ExoneraTorServlet extends HttpServlet {
       throws IOException {
     String formattedRelayIP = relayIP.contains(":") ?
         "[" + relayIP + "]" : relayIP;
-    out.printf("<div class=\"row\">\n"
-        + "<div class=\"col-xs-12\">\n"
-        + "<h2>%s</h2>\n"
-        + "<p>%s</p>\n"
-        + "<table class=\"table\">\n"
-        + "<thead>\n"
-        + "<tr>\n"
-        + "<th>%s</th>\n"
-        + "<th>%s</th>\n"
-        + "<th>%s</th>\n"
-        + "<th>%s</th>\n"
-        + "<th>%s</th>\n"
-        + "</tr>\n"
-        + "</thead>\n"
-        + "<tbody>\n",
+    out.printf("      <div class=\"row\">\n"
+        + "        <div class=\"col-xs-12\">\n"
+        + "          <h2>%s</h2>\n"
+        + "          <p>%s</p>\n"
+        + "          <table class=\"table\">\n"
+        + "            <thead>\n"
+        + "              <tr>\n"
+        + "                <th>%s</th>\n"
+        + "                <th>%s</th>\n"
+        + "                <th>%s</th>\n"
+        + "                <th>%s</th>\n"
+        + "                <th>%s</th>\n"
+        + "              </tr>\n"
+        + "            </thead>\n"
+        + "            <tbody>\n",
         rb.getString("technicaldetails.heading"),
         String.format(rb.getString("technicaldetails.pre"),
             formattedRelayIP, timestampStr),
@@ -771,7 +775,7 @@ public class ExoneraTorServlet extends HttpServlet {
         rb.getString("technicaldetails.colheader.nickname"),
         rb.getString("technicaldetails.colheader.exit"));
     for (String[] tableRow : tableRows) {
-      out.print("<tr>");
+      out.print("              <tr>");
       for (int i = 0; i < tableRow.length; i++) {
         String content = tableRow[i];
         if (i == 2) {
@@ -789,44 +793,41 @@ public class ExoneraTorServlet extends HttpServlet {
             content = rb.getString("technicaldetails.exit.no");
           }
         }
-        out.print("<td>" + content + "</td>");
+        out.print("                <td>" + content + "</td>");
       }
-      out.print("</tr>\n");
+      out.print("              </tr>\n");
     }
-    out.print("</tr>\n"
-        + "</tbody>\n"
-        + "</table>\n"
-        + "</div><!-- col -->\n"
-        + "</div><!-- row -->\n");
+    out.print("            </tbody>\n"
+        + "          </table>\n"
+        + "        </div><!-- col -->\n"
+        + "      </div><!-- row -->\n");
   }
 
   private void writePermanentLink(PrintWriter out, ResourceBundle rb,
       String relayIP, String timestampStr) throws IOException {
     String encodedAddress = relayIP.contains(":") ?
         "[" + relayIP.replaceAll(":", "%3A") + "]" : relayIP;
-    out.printf("<div class=\"row\">\n"
-        + "<div class=\"col-xs-12\">\n"
-        + "<h2>%s</h2>\n"
-        + "<pre>https://exonerator.torproject.org/?ip=%s&amp;"
+    out.printf("      <div class=\"row\">\n"
+        + "        <div class=\"col-xs-12\">\n"
+        + "          <h2>%s</h2>\n"
+        + "          <pre>https://exonerator.torproject.org/?ip=%s&amp;"
           + "timestamp=%s</pre>\n"
-        + "</div><!-- col -->\n"
-        + "</div><!-- row -->\n",
+        + "        </div><!-- col -->\n"
+        + "      </div><!-- row -->\n",
         rb.getString("permanentlink.heading"),
         encodedAddress, timestampStr);
   }
 
   private void writeFooter(PrintWriter out, ResourceBundle rb)
       throws IOException {
-    out.printf("</div><!-- container -->\n"
-        + "<div class=\"footer\">\n"
-        + "<div class=\"container\">\n"
-        + "<div class=\"row\">\n"
-        + "<div class=\"col-xs-6\">\n"
-        + "<h3>%s</h3>\n"
-        + "<p class=\"small\">\n"
-        + "%s\n"
-        + "</p>\n"
-        + "</div><!-- col -->\n",
+    out.printf("    </div><!-- container -->\n"
+        + "    <div class=\"footer\">\n"
+        + "      <div class=\"container\">\n"
+        + "        <div class=\"row\">\n"
+        + "          <div class=\"col-xs-6\">\n"
+        + "            <h3>%s</h3>\n"
+        + "            <p class=\"small\">%s</p>\n"
+        + "          </div><!-- col -->\n",
         rb.getString("footer.abouttor.heading"),
         String.format(rb.getString("footer.abouttor.body.text"),
             "<a href=\"https://www.torproject.org/about/"
@@ -836,23 +837,21 @@ public class ExoneraTorServlet extends HttpServlet {
             + rb.getString("footer.abouttor.body.link2") + "</a>",
             "<a href=\"https://www.torproject.org/about/contact\">"
             + rb.getString("footer.abouttor.body.link3") + "</a>"));
-    out.printf("<div class=\"col-xs-6\">\n"
-        + "<h3>%s</h3>\n"
-        + "<p class=\"small\">\n"
-        + "%s\n"
-        + "</p>\n"
-        + "</div><!-- col -->\n"
-        + "</div><!-- row -->\n"
-        + "<div class=\"row\">\n",
+    out.printf("          <div class=\"col-xs-6\">\n"
+        + "            <h3>%s</h3>\n"
+        + "            <p class=\"small\">%s</p>\n"
+        + "          </div><!-- col -->\n"
+        + "        </div><!-- row -->\n"
+        + "        <div class=\"row\">\n",
         rb.getString("footer.aboutexonerator.heading"),
         rb.getString("footer.aboutexonerator.body"));
-    out.printf("<div class=\"col-xs-12\">\n"
-        + "<p class=\"text-center small\">%s</p>\n"
-        + "</div><!-- col -->\n"
-        + "</div><!-- row -->\n"
-        + "</div><!-- container -->\n"
-        + "</div><!-- footer -->\n"
-        + "</body>\n"
+    out.printf("          <div class=\"col-xs-12\">\n"
+        + "            <p class=\"text-center small\">%s</p>\n"
+        + "          </div><!-- col -->\n"
+        + "        </div><!-- row -->\n"
+        + "      </div><!-- container -->\n"
+        + "    </div><!-- footer -->\n"
+        + "  </body>\n"
         + "</html>\n",
         String.format(rb.getString("footer.trademark.text"),
             "<a href=\"https://www.torproject.org/docs/"
