@@ -519,6 +519,7 @@ public class ExoneraTorServlet extends HttpServlet {
           + "initial-scale=1\">\n"
         + "<title>ExoneraTor</title>\n"
         + "<link rel=\"stylesheet\" href=\"css/bootstrap.min.css\">\n"
+        + "<link rel=\"stylesheet\" href=\"css/exonerator.css\">\n"
         + "<link href=\"images/favicon.ico\" type=\"image/x-icon\" "
           + "rel=\"icon\">\n"
         + "</head>\n"
@@ -547,6 +548,9 @@ public class ExoneraTorServlet extends HttpServlet {
     out.printf("<div class=\"row\">\n"
         + "<div class=\"col-xs-12\">\n"
         + "<div class=\"text-center\">\n"
+        + "<div class=\"row vbottom15\">\n"
+        + "<h4>%s</h4>\n"
+        + "</div> <!-- row -->\n"
         + "<form class=\"form-inline\">\n"
         + "<div class=\"form-group%s\">\n"
         + "<label for=\"inputIp\" class=\"control-label\">%s</label>\n"
@@ -566,6 +570,7 @@ public class ExoneraTorServlet extends HttpServlet {
         + "</div><!-- text-center -->\n"
         + "</div><!-- col -->\n"
         + "</div><!-- row -->\n",
+        rb.getString("form.explanation"),
         relayIPHasError ? " has-error" : "",
         rb.getString("form.ip.label"),
         ipValue,
@@ -812,7 +817,10 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private void writeFooter(PrintWriter out, ResourceBundle rb)
       throws IOException {
-    out.printf("<div class=\"row\">\n"
+    out.printf("</div><!-- container -->\n"
+        + "<div class=\"footer\">\n"
+        + "<div class=\"container\">\n"
+        + "<div class=\"row\">\n"
         + "<div class=\"col-xs-6\">\n"
         + "<h3>%s</h3>\n"
         + "<p class=\"small\">\n"
@@ -843,6 +851,7 @@ public class ExoneraTorServlet extends HttpServlet {
         + "</div><!-- col -->\n"
         + "</div><!-- row -->\n"
         + "</div><!-- container -->\n"
+        + "</div><!-- footer -->\n"
         + "</body>\n"
         + "</html>\n",
         String.format(rb.getString("footer.trademark.text"),

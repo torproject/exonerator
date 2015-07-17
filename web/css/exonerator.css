@@ -1,0 +1,21 @@
+html {
+  position: relative;
+  min-height: 100%;
+}
+
+body {
+  margin: 0 0 200px; /* bottom = footer height */
+}
+
+.footer {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 200px;
+  width: 100%;
+}
+
+.vbottom15 {
+  margin-bottom: 15px;
+}
+
