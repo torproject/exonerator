@@ -4,14 +4,14 @@ html {
 }
 
 body {
-  margin: 0 0 180px; /* bottom = footer height */
+  margin: 0 0 300px; /* bottom = footer height */
 }
 
 .footer {
   position: absolute;
   left: 0;
   bottom: 0;
-  height: 180px;
+  height: 300px;
   width: 100%;
 }
 
