@@ -25,3 +25,7 @@ body {
   margin-bottom: 15px;
 }
 
+pre {
+  white-space: pre-wrap;
+}
+
