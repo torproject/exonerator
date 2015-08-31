@@ -100,20 +100,14 @@ public class ExoneraTorDatabaseImporter {
   }
 
   /* Callable statements to import data into the database. */
-  private static CallableStatement insertDescriptorStatement;
   private static CallableStatement insertStatusentryStatement;
-  private static CallableStatement insertConsensusStatement;
   private static CallableStatement insertExitlistentryStatement;
 
   /* Prepare statements for importing data into the database. */
   private static void prepareDatabaseStatements() {
     try {
-      insertDescriptorStatement = connection.prepareCall(
-          "{call insert_descriptor(?, ?)}");
       insertStatusentryStatement = connection.prepareCall(
           "{call insert_statusentry(?, ?, ?, ?, ?, ?, ?)}");
-      insertConsensusStatement = connection.prepareCall(
-          "{call insert_consensus(?, ?)}");
       insertExitlistentryStatement = connection.prepareCall(
           "{call insert_exitlistentry(?, ?, ?, ?, ?)}");
     } catch (SQLException e) {
@@ -159,7 +153,6 @@ public class ExoneraTorDatabaseImporter {
         DescriptorSourceFactory.createDescriptorCollector();
     collector.collectDescriptors("https://collector.torproject.org",
         new String[] { "/recent/relay-descriptors/consensuses/",
-        "/recent/relay-descriptors/server-descriptors/",
         "/recent/exit-lists/" }, 0L, new File(importDirString), true);
   }
 
@@ -269,9 +262,7 @@ public class ExoneraTorDatabaseImporter {
       }
       br.close();
       String startToken = null;
-      if (line.startsWith("router ")) {
-        startToken = "router ";
-      } else if (line.equals("network-status-version 3")) {
+      if (line.equals("network-status-version 3")) {
         startToken = "network-status-version 3";
       } else if (line.startsWith("Downloaded ") ||
           line.startsWith("ExitNode ")) {
@@ -292,9 +283,7 @@ public class ExoneraTorDatabaseImporter {
         }
         byte[] descBytes = new byte[end - start];
         System.arraycopy(bytes, start, descBytes, 0, end - start);
-        if (startToken.equals("router ")) {
-          parseServerDescriptor(file, descBytes);
-        } else if (startToken.equals("network-status-version 3")) {
+        if (startToken.equals("network-status-version 3")) {
           parseConsensus(file, descBytes);
         } else if (startToken.equals("ExitNode ")) {
           parseExitList(file, descBytes);
@@ -312,47 +301,6 @@ public class ExoneraTorDatabaseImporter {
   static {
     parseFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     parseFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-  }
-
-  /* Parse a single server descriptor. */
-  private static void parseServerDescriptor(File file, byte[] bytes) {
-    String ascii = "";
-    try {
-      ascii = new String(bytes, "US-ASCII");
-    } catch (UnsupportedEncodingException e) {
-      /* We know that US-ASCII is a supported encoding. */
-    }
-    String startToken = "router ";
-    String sigToken = "\nrouter-signature\n";
-    int start = ascii.indexOf(startToken);
-    int sig = ascii.indexOf(sigToken) + sigToken.length();
-    String descriptor = null;
-    if (start >= 0 || sig >= 0 || sig > start) {
-      byte[] forDigest = new byte[sig - start];
-      System.arraycopy(bytes, start, forDigest, 0, sig - start);
-      descriptor = DigestUtils.shaHex(forDigest);
-    }
-    if (descriptor == null) {
-      System.out.println("Could not calculate descriptor digest.  "
-          + "Skipping.");
-      return;
-    }
-    importDescriptor(descriptor, bytes);
-  }
-
-  /* Import a single server descriptor into the database. */
-  private static void importDescriptor(String descriptor,
-      byte[] rawDescriptor) {
-    try {
-      insertDescriptorStatement.clearParameters();
-      insertDescriptorStatement.setString(1, descriptor);
-      insertDescriptorStatement.setBytes(2, rawDescriptor);
-      insertDescriptorStatement.execute();
-    } catch (SQLException e) {
-      System.out.println("Could not import descriptor into the "
-          + "database.  Exiting.");
-      System.exit(1);
-    }
   }
 
   /* Parse a consensus. */
@@ -381,7 +329,6 @@ public class ExoneraTorDatabaseImporter {
                 + "'" + file + "'.  Skipping.");
             return;
           }
-          importConsensus(validAfterMillis, bytes);
         } else if (line.startsWith("r ") ||
             line.equals("directory-footer")) {
           if (isRunning) {
@@ -494,21 +441,6 @@ public class ExoneraTorDatabaseImporter {
       }
     } catch (SQLException e) {
       System.out.println("Could not import status entry.  Exiting.");
-      System.exit(1);
-    }
-  }
-
-  /* Import a consensus into the database. */
-  private static void importConsensus(long validAfterMillis,
-      byte[] rawConsensus) {
-    try {
-      insertConsensusStatement.clearParameters();
-      insertConsensusStatement.setTimestamp(1,
-          new Timestamp(validAfterMillis), calendarUTC);
-      insertConsensusStatement.setBytes(2, rawConsensus);
-      insertConsensusStatement.execute();
-    } catch (SQLException e) {
-      System.out.println("Could not import consensus.  Exiting.");
       System.exit(1);
     }
   }

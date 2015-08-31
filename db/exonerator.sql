@@ -1,32 +1,6 @@
 -- Copyright 2011 The Tor Project
 -- See LICENSE for licensing information
 
--- The descriptor table holds server descriptors that we use for display
--- purposes and to parse exit policies.
-CREATE TABLE descriptor (
-
-  -- The 40-character lower-case hex string identifies a descriptor
-  -- uniquely and is used to join statusentry and this table.
-  descriptor CHARACTER(40) NOT NULL PRIMARY KEY,
-
-  -- The raw descriptor string is used for display purposes and to check
-  -- whether the relay allowed exiting to a given target or not.
-  rawdescriptor BYTEA NOT NULL
-);
-
--- The consensus table stores network status consensuses to be looked up
--- by valid-after time and displayed upon request.  A second purpose is
--- to learn quickly whether the database contains status entries for a
--- given day or not.
-CREATE TABLE consensus (
-
-  -- The unique valid-after time of the consensus.
-  validafter TIMESTAMP WITHOUT TIME ZONE NOT NULL PRIMARY KEY,
-
-  -- The raw consensus string for display purposes only.
-  rawconsensus BYTEA NOT NULL
-);
-
 -- The statusentry table stores network status consensus entries listing
 -- a relay as running at a certain point in time.  Only relays with the
 -- Running flag shall be inserted into this table.  If a relay advertises
@@ -72,6 +46,10 @@ CREATE TABLE statusentry (
   CONSTRAINT statusentry_pkey
       PRIMARY KEY (validafter, fingerprint, oraddress)
 );
+
+-- The index on the valid-after time is used to return first and last
+-- date in the database and known valid-after times in a given interval.
+CREATE INDEX statusentry_validafter ON statusentry (validafter);
 
 -- The index on the exact onion routing address and on the valid-after
 -- date is used to speed up ExoneraTor's query for status entries.
@@ -141,33 +119,6 @@ CREATE INDEX exitlistentry_exitaddress24_scanneddate
 -- Create the plpgsql language, so that we can use it below.
 CREATE LANGUAGE plpgsql;
 
--- Insert a server descriptor into the descriptor table.  Before doing so,
--- check that there is no descriptor with the same descriptor identifier
--- in the table yet.  Return 1 if the descriptor was inserted, 0
--- otherwise.
-CREATE OR REPLACE FUNCTION insert_descriptor (
-    insert_descriptor CHARACTER(40),
-    insert_rawdescriptor BYTEA)
-    RETURNS INTEGER AS $$
-  BEGIN
-    -- Look up if the descriptor is already contained in the descriptor
-    -- table.
-    IF (SELECT COUNT(*)
-        FROM descriptor
-        WHERE descriptor = insert_descriptor) = 0 THEN
-      -- Insert the descriptor and remember the new descriptorid to update
-      -- the foreign key in statusentry.
-      INSERT INTO descriptor (descriptor, rawdescriptor)
-          VALUES (insert_descriptor, insert_rawdescriptor);
-      -- Return 1 for a successfully inserted descriptor.
-      RETURN 1;
-    ELSE
-      -- Return 0 because we didn't change anything.
-      RETURN 0;
-    END IF;
-  END;
-$$ LANGUAGE 'plpgsql';
-
 -- Insert a status entry into the statusentry table.  First check that
 -- this status entry isn't contained in the table yet.  It's okay to
 -- insert the same status entry multiple times for different IP addresses
@@ -199,31 +150,6 @@ CREATE OR REPLACE FUNCTION insert_statusentry (
       RETURN 1;
     ELSE
       -- Return 0 because we already had this status entry.
-      RETURN 0;
-    END IF;
-  END;
-$$ LANGUAGE 'plpgsql';
-
--- Insert a consensus into the consensus table.  Check that the same
--- consensus has not been imported before.  Return 1 if it was inserted, 0
--- otherwise.
-CREATE OR REPLACE FUNCTION insert_consensus (
-    insert_validafter TIMESTAMP WITHOUT TIME ZONE,
-    insert_rawconsensus BYTEA)
-    RETURNS INTEGER AS $$
-  BEGIN
-    -- Look up if the consensus is already contained in the consensus
-    -- table.
-    IF (SELECT COUNT(*)
-        FROM consensus
-        WHERE validafter = insert_validafter) = 0 THEN
-      -- Insert the consensus.
-      INSERT INTO consensus (validafter, rawconsensus)
-          VALUES (insert_validafter, insert_rawconsensus);
-      -- Return 1 for a successful insert operation.
-      RETURN 1;
-    ELSE
-      -- Return 0 for not inserting the consensus.
       RETURN 0;
     END IF;
   END;

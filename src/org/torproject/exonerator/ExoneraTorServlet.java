@@ -350,7 +350,7 @@ public class ExoneraTorServlet extends HttpServlet {
     try {
       Statement statement = conn.createStatement();
       String query = "SELECT DATE(MIN(validafter)) AS first, "
-          + "DATE(MAX(validafter)) AS last FROM consensus";
+          + "DATE(MAX(validafter)) AS last FROM statusentry";
       ResultSet rs = statement.executeQuery(query);
       if (rs.next()) {
         Calendar utcCalendar = Calendar.getInstance(
@@ -374,7 +374,7 @@ public class ExoneraTorServlet extends HttpServlet {
     SortedSet<Long> relevantConsensuses = new TreeSet<Long>();
     try {
       Statement statement = conn.createStatement();
-      String query = "SELECT validafter FROM consensus "
+      String query = "SELECT DISTINCT validafter FROM statusentry "
           + "WHERE validafter >= '" + fromValidAfter
           + "' AND validafter <= '" + toValidAfter + "'";
       ResultSet rs = statement.executeQuery(query);
