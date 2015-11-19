@@ -196,42 +196,14 @@ public class ExoneraTorServlet extends HttpServlet {
     if (statusEntries.isEmpty()) {
       addressesInSameNetwork = new ArrayList<String>();
       if (!relayIP.contains(":")) {
-        String[] relayIPParts = relayIP.split("\\.");
-        byte[] address24Bytes = new byte[3];
-        address24Bytes[0] = (byte) Integer.parseInt(relayIPParts[0]);
-        address24Bytes[1] = (byte) Integer.parseInt(relayIPParts[1]);
-        address24Bytes[2] = (byte) Integer.parseInt(relayIPParts[2]);
-        String address24 = Hex.encodeHexString(address24Bytes);
-        addressesInSameNetwork = this.queryAddressesInSame24(conn,
-            address24, timestamp);
+        String address24 = this.convertIPv4ToHex(relayIP).substring(0, 6);
+        if (address24 != null) {
+          addressesInSameNetwork = this.queryAddressesInSame24(conn,
+              address24, timestamp);
+        }
       } else {
-        StringBuilder addressHex = new StringBuilder();
-        int start = relayIP.startsWith("::") ? 1 : 0;
-        int end = relayIP.length() - (relayIP.endsWith("::") ? 1 : 0);
-        String[] parts = relayIP.substring(start, end).split(":", -1);
-        for (int i = 0; i < parts.length; i++) {
-          String part = parts[i];
-          if (part.length() == 0) {
-            addressHex.append("x");
-          } else if (part.length() <= 4) {
-            addressHex.append(String.format("%4s", part));
-          } else {
-            addressHex = null;
-            break;
-          }
-        }
-        String address48 = null;
-        if (addressHex != null) {
-          String addressHexString = addressHex.toString();
-          addressHexString = addressHexString.replaceFirst("x",
-              String.format("%" + (33 - addressHexString.length())
-              + "s", "0"));
-          if (!addressHexString.contains("x") &&
-              addressHexString.length() == 32) {
-            address48 = addressHexString.replaceAll(" ", "0").
-                toLowerCase().substring(0, 12);
-          }
-        }
+        String address48 = this.convertIPv6ToHex(relayIP).substring(
+            0, 12);
         if (address48 != null) {
           addressesInSameNetwork = this.queryAddressesInSame48(conn,
               address48, timestamp);
@@ -315,6 +287,50 @@ public class ExoneraTorServlet extends HttpServlet {
     return relayIP;
   }
 
+  private String convertIPv4ToHex(String relayIP) {
+    String[] relayIPParts = relayIP.split("\\.");
+    byte[] address24Bytes = new byte[4];
+    for (int i = 0; i < address24Bytes.length; i++) {
+      address24Bytes[i] = (byte) Integer.parseInt(relayIPParts[i]);
+    }
+    String address24 = Hex.encodeHexString(address24Bytes);
+    return address24;
+  }
+
+  private String convertIPv6ToHex(String relayIP) {
+    if (relayIP.startsWith("[") && relayIP.endsWith("]")) {
+      relayIP = relayIP.substring(1, relayIP.length() - 1);
+    }
+    StringBuilder addressHex = new StringBuilder();
+    int start = relayIP.startsWith("::") ? 1 : 0;
+    int end = relayIP.length() - (relayIP.endsWith("::") ? 1 : 0);
+    String[] parts = relayIP.substring(start, end).split(":", -1);
+    for (int i = 0; i < parts.length; i++) {
+      String part = parts[i];
+      if (part.length() == 0) {
+        addressHex.append("x");
+      } else if (part.length() <= 4) {
+        addressHex.append(String.format("%4s", part));
+      } else {
+        addressHex = null;
+        break;
+      }
+    }
+    String address48 = null;
+    if (addressHex != null) {
+      String addressHexString = addressHex.toString();
+      addressHexString = addressHexString.replaceFirst("x",
+          String.format("%" + (33 - addressHexString.length())
+          + "s", "0"));
+      if (!addressHexString.contains("x") &&
+          addressHexString.length() == 32) {
+        address48 = addressHexString.replaceAll(" ", "0").
+            toLowerCase();
+      }
+    }
+    return address48;
+  }
+
   private String parseTimestampParameter(
       String passedTimestampParameter) {
     String timestampStr = "";
@@ -396,20 +412,32 @@ public class ExoneraTorServlet extends HttpServlet {
       String relayIP, long timestamp,
       SimpleDateFormat validAfterTimeFormat) {
     List<String[]> statusEntries = new ArrayList<String[]>();
+    String addressHex = !relayIP.contains(":")
+        ? this.convertIPv4ToHex(relayIP) : this.convertIPv6ToHex(relayIP);
+    if (addressHex == null) {
+      return null;
+    }
+    String address24Or48Hex = !relayIP.contains(":")
+        ? addressHex.substring(0, 6) : addressHex.substring(0, 12);
     try {
-      CallableStatement cs = conn.prepareCall(
-          "{call search_statusentries_by_address_date(?, ?)}");
-      cs.setString(1, relayIP);
+      CallableStatement cs;
+      if (!relayIP.contains(":")) {
+        cs = conn.prepareCall("{call search_by_address24_date(?, ?)}");
+      } else {
+        cs = conn.prepareCall("{call search_by_address48_date(?, ?)}");
+      }
+      cs.setString(1, address24Or48Hex);
       Calendar utcCalendar = Calendar.getInstance(
           TimeZone.getTimeZone("UTC"));
       cs.setDate(2, new java.sql.Date(timestamp), utcCalendar);
       ResultSet rs = cs.executeQuery();
       while (rs.next()) {
         byte[] rawstatusentry = rs.getBytes(1);
-        SortedSet<String> addresses = new TreeSet<String>();
-        long validafter = rs.getTimestamp(3, utcCalendar).getTime();
+        SortedSet<String> addresses = new TreeSet<String>(),
+            addressesHex = new TreeSet<String>();
+        long validafter = rs.getTimestamp(2, utcCalendar).getTime();
         String validAfterString = validAfterTimeFormat.format(validafter);
-        String fingerprint = rs.getString(4).toUpperCase();
+        String fingerprint = rs.getString(3).toUpperCase();
         String nickname = null;
         String exit = "U";
         for (String line : new String(rawstatusentry).split("\n")) {
@@ -417,17 +445,26 @@ public class ExoneraTorServlet extends HttpServlet {
             String[] parts = line.split(" ");
             nickname = parts[1];
             addresses.add(parts[6]);
+            addressesHex.add(this.convertIPv4ToHex(parts[6]));
           } else if (line.startsWith("a ")) {
             String address = line.substring("a ".length(),
                 line.lastIndexOf(":"));
             addresses.add(address);
+            String orAddressHex = !address.contains(":")
+                ? this.convertIPv4ToHex(address)
+                : this.convertIPv6ToHex(address);
+            addressesHex.add(orAddressHex);
           } else if (line.startsWith("p ")) {
             exit = line.equals("p reject 1-65535") ? "N" : "Y";
           }
         }
-        String exitaddress = rs.getString(6);
+        String exitaddress = rs.getString(4);
         if (exitaddress != null && exitaddress.length() > 0) {
           addresses.add(exitaddress);
+          addressesHex.add(this.convertIPv4ToHex(exitaddress));
+        }
+        if (!addressesHex.contains(addressHex)) {
+          continue;
         }
         StringBuilder sb = new StringBuilder();
         int writtenAddresses = 0;

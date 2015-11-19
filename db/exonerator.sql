@@ -68,6 +68,11 @@ CREATE INDEX statusentry_oraddress24_validafterdate
 CREATE INDEX statusentry_oraddress48_validafterdate
     ON statusentry (oraddress48, DATE(validafter));
 
+-- The index on fingerprint and valid-after time speeds up joins with
+-- exitlistentry.
+CREATE INDEX statusentry_fingerprint_validafter_fingerprint
+    ON statusentry (fingerprint, validafter);
+
 -- The exitlistentry table stores the results of the active testing,
 -- DNS-based exit list for exit nodes.  An entry in this table means that
 -- a relay was scanned at a given time and found to be exiting to the
@@ -187,48 +192,40 @@ CREATE OR REPLACE FUNCTION insert_exitlistentry (
   END;
 $$ LANGUAGE 'plpgsql';
 
--- Search for status entries with the given IP address as onion routing
--- address, plus status entries of relays having an exit list entry with
--- the given IP address as exit address.
-CREATE OR REPLACE FUNCTION search_statusentries_by_address_date (
-    select_address TEXT,
+-- Search for status entries with an IPv4 onion routing address in the
+-- same /24 network as the given hex-encoded IP address prefix and with a
+-- valid-after date within a day of the given date, plus status entries of
+-- relays having an exit list entry with an exit address in the same /24
+-- network as the given hex-encoded IP address prefix and with a scan time
+-- within a day of the given date.
+CREATE OR REPLACE FUNCTION search_by_address24_date (
+    select_address24 TEXT,
     select_date DATE)
     RETURNS TABLE(rawstatusentry BYTEA,
-          descriptor CHARACTER(40),
           validafter TIMESTAMP WITHOUT TIME ZONE,
           fingerprint CHARACTER(40),
-          oraddress TEXT,
-          exitaddress TEXT,
-          scanned TIMESTAMP WITHOUT TIME ZONE) AS $$
+          exitaddress TEXT) AS $$
   -- The first select finds all status entries of relays with the given
   -- IP address as onion routing address.
   SELECT rawstatusentry,
-        descriptor,
         validafter,
         fingerprint,
-        HOST(oraddress),
-        NULL,
         NULL
       FROM statusentry
-      WHERE oraddress = $1::INET
+      WHERE oraddress24 = $1
       AND DATE(validafter) >= $2 - 1
       AND DATE(validafter) <= $2 + 1
   UNION
   -- The second select finds status entries of relays having an exit list
   -- entry with the provided IP address as the exit address.
-  SELECT statusentry.rawstatusentry,
-        statusentry.descriptor,
+  SELECT DISTINCT statusentry.rawstatusentry,
         statusentry.validafter,
         statusentry.fingerprint,
-        HOST(statusentry.oraddress),
-        HOST(exitlistentry.exitaddress),
-        -- Pick only the last scan result that took place in the 24 hours
-        -- before the valid-after time.
-        MAX(exitlistentry.scanned)
+        HOST(exitlistentry.exitaddress)
       FROM statusentry
       JOIN exitlistentry
       ON statusentry.fingerprint = exitlistentry.fingerprint
-      WHERE exitlistentry.exitaddress = $1::INET
+      WHERE exitlistentry.exitaddress24 = $1
       -- Focus on a time period from 1 day before and 1 day after the
       -- given date.  Also include a second day before the given date
       -- for exit lists, because it can take up to 24 hours to scan a
@@ -242,8 +239,28 @@ CREATE OR REPLACE FUNCTION search_statusentries_by_address_date (
       AND statusentry.validafter >= exitlistentry.scanned
       AND statusentry.validafter - exitlistentry.scanned <=
           '1 day'::INTERVAL
-      GROUP BY 1, 2, 3, 4, 5, 6
-  ORDER BY 3, 4, 6;
+  ORDER BY 2, 3, 4;
+$$ LANGUAGE SQL;
+
+-- Search for status entries with an IPv6 onion routing address in the
+-- same /48 network as the given hex-encoded IP address prefix and with a
+-- valid-after date within a day of the given date.
+CREATE OR REPLACE FUNCTION search_by_address48_date (
+    select_address48 TEXT,
+    select_date DATE)
+    RETURNS TABLE(rawstatusentry BYTEA,
+          validafter TIMESTAMP WITHOUT TIME ZONE,
+          fingerprint CHARACTER(40),
+          exitaddress TEXT) AS $$
+  SELECT rawstatusentry,
+        validafter,
+        fingerprint,
+        NULL::TEXT
+      FROM statusentry
+      WHERE oraddress48 = $1
+      AND DATE(validafter) >= $2 - 1
+      AND DATE(validafter) <= $2 + 1
+  ORDER BY 2, 3;
 $$ LANGUAGE SQL;
 
 -- Look up all IPv4 OR and exit addresses in the /24 network of a given
