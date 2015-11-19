@@ -205,19 +205,29 @@ CREATE OR REPLACE FUNCTION search_by_address24_date (
           validafter TIMESTAMP WITHOUT TIME ZONE,
           fingerprint CHARACTER(40),
           exitaddress TEXT) AS $$
+  BEGIN
+  RETURN QUERY EXECUTE
   -- The first select finds all status entries of relays with the given
   -- IP address as onion routing address.
-  SELECT rawstatusentry,
+  --
+  -- The second select finds status entries of relays having an exit list
+  -- entry with the provided IP address as the exit address.
+  -- In the second select,
+  --  - Focus on a time period from 1 day before and 1 day after the
+  -- given date.  Also include a second day before the given date
+  -- for exit lists, because it can take up to 24 hours to scan a
+  -- relay again.  We should not miss exit list entries here.
+  --  - Consider only exit list scans that took place in the 24 hours
+  -- before the relay was listed in a consensus.
+  'SELECT rawstatusentry,
         validafter,
         fingerprint,
         NULL
       FROM statusentry
-      WHERE oraddress24 = $1
-      AND DATE(validafter) >= $2 - 1
-      AND DATE(validafter) <= $2 + 1
+      WHERE oraddress24 = ''' || select_address24 || '''
+      AND DATE(validafter) >= ''' || select_date || '''::DATE - 1
+      AND DATE(validafter) <= ''' || select_date || '''::DATE + 1
   UNION
-  -- The second select finds status entries of relays having an exit list
-  -- entry with the provided IP address as the exit address.
   SELECT DISTINCT statusentry.rawstatusentry,
         statusentry.validafter,
         statusentry.fingerprint,
@@ -225,22 +235,21 @@ CREATE OR REPLACE FUNCTION search_by_address24_date (
       FROM statusentry
       JOIN exitlistentry
       ON statusentry.fingerprint = exitlistentry.fingerprint
-      WHERE exitlistentry.exitaddress24 = $1
-      -- Focus on a time period from 1 day before and 1 day after the
-      -- given date.  Also include a second day before the given date
-      -- for exit lists, because it can take up to 24 hours to scan a
-      -- relay again.  We shouldn't miss exit list entries here.
-      AND DATE(exitlistentry.scanned) >= $2 - 2
-      AND DATE(exitlistentry.scanned) <= $2 + 1
-      AND DATE(statusentry.validafter) >= $2 - 1
-      AND DATE(statusentry.validafter) <= $2 + 1
-      -- Consider only exit list scans that took place in the 24 hours
-      -- before the relay was listed in a consensus.
+      WHERE exitlistentry.exitaddress24 = ''' || select_address24 || '''
+      AND DATE(exitlistentry.scanned) >= ''' || select_date
+          || '''::DATE - 2
+      AND DATE(exitlistentry.scanned) <= ''' || select_date
+          || '''::DATE + 1
+      AND DATE(statusentry.validafter) >= ''' || select_date
+          || '''::DATE - 1
+      AND DATE(statusentry.validafter) <= ''' || select_date
+          || '''::DATE + 1
       AND statusentry.validafter >= exitlistentry.scanned
       AND statusentry.validafter - exitlistentry.scanned <=
-          '1 day'::INTERVAL
-  ORDER BY 2, 3, 4;
-$$ LANGUAGE SQL;
+          ''1 day''::INTERVAL
+  ORDER BY 2, 3, 4';
+  END;
+$$ LANGUAGE plpgsql;
 
 -- Search for status entries with an IPv6 onion routing address in the
 -- same /48 network as the given hex-encoded IP address prefix and with a
@@ -252,16 +261,19 @@ CREATE OR REPLACE FUNCTION search_by_address48_date (
           validafter TIMESTAMP WITHOUT TIME ZONE,
           fingerprint CHARACTER(40),
           exitaddress TEXT) AS $$
-  SELECT rawstatusentry,
+  BEGIN
+  RETURN QUERY EXECUTE
+  'SELECT rawstatusentry,
         validafter,
         fingerprint,
         NULL::TEXT
       FROM statusentry
-      WHERE oraddress48 = $1
-      AND DATE(validafter) >= $2 - 1
-      AND DATE(validafter) <= $2 + 1
-  ORDER BY 2, 3;
-$$ LANGUAGE SQL;
+      WHERE oraddress48 = ''' || select_address48 || '''
+      AND DATE(validafter) >= ''' || select_date || '''::DATE - 1
+      AND DATE(validafter) <= ''' || select_date || '''::DATE + 1
+  ORDER BY 2, 3';
+  END;
+$$ LANGUAGE plpgsql;
 
 -- Look up all IPv4 OR and exit addresses in the /24 network of a given
 -- address to suggest other addresses the user may be looking for.
