@@ -62,6 +62,9 @@ public class ExoneraTorServlet extends HttpServlet {
       HttpServletResponse response) throws IOException,
       ServletException {
 
+    /* Set content type, or the page doesn't render in Chrome. */
+    response.setContentType("text/html");
+
     /* Start writing response. */
     PrintWriter out = response.getWriter();
     this.writeHeader(out);
