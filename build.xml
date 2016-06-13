@@ -4,6 +4,7 @@
   <property name="sources" value="src"/>
   <property name="resources" value="res"/>
   <property name="classes" value="classes"/>
+  <property name="libs" value="lib"/>
   <property name="config" value="etc"/>
   <property name="webxmlfile" value="${config}/web.xml"/>
   <property name="contextxmltemplate"
@@ -12,14 +13,12 @@
   <property name="warfile" value="exonerator.war"/>
   <path id="classpath">
     <pathelement path="${classes}"/>
-    <fileset dir="deps/metrics-lib">
-      <include name="descriptor.jar"/>
-    </fileset>
-    <fileset dir="/usr/share/java">
-      <include name="commons-codec.jar"/>
-      <include name="postgresql-jdbc3.jar"/>
-      <include name="servlet-api-2.5.jar"/>
-      <include name="commons-lang.jar"/>
+    <fileset dir="${libs}">
+      <include name="descriptor-1.2.0.jar"/>
+      <include name="commons-codec-1.9.jar"/>
+      <include name="postgresql-jdbc4-9.2.jar"/>
+      <include name="servlet-api-3.0.jar"/>
+      <include name="commons-lang-2.6.jar"/>
     </fileset>
   </path>
 
@@ -29,12 +28,8 @@
     <mkdir dir="${classes}"/>
   </target>
 
-  <target name="metrics-lib">
-    <ant dir="deps/metrics-lib"/>
-  </target>
-
   <!-- Compile all servlets and plain Java classes. -->
-  <target name="compile" depends="metrics-lib, init">
+  <target name="compile" depends="init">
     <javac destdir="${classes}"
            srcdir="${sources}"
            source="1.5"
@@ -64,9 +59,8 @@
          webxml="${webxmlfile}">
       <fileset dir="web"/>
       <lib dir="/usr/share/java">
-          <include name="commons-codec.jar"/>
-          <include name="postgresql-jdbc3.jar"/>
-          <include name="commons-lang.jar"/>
+          <include name="commons-codec-1.9.jar"/>
+          <include name="commons-lang-2.6.jar"/>
       </lib>
       <classes dir="${classes}"/>
       <zipfileset dir="${resources}"
