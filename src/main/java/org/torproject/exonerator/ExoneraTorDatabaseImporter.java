@@ -1,6 +1,13 @@
-/* Copyright 2011, 2012 The Tor Project
+/* Copyright 2011--2016 The Tor Project
  * See LICENSE for licensing information */
+
 package org.torproject.exonerator;
+
+import org.torproject.descriptor.DescriptorCollector;
+import org.torproject.descriptor.DescriptorSourceFactory;
+
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.codec.binary.Hex;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
@@ -12,7 +19,6 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.StringReader;
-import java.io.UnsupportedEncodingException;
 import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -28,12 +34,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
 import java.util.TimeZone;
-
-import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.codec.binary.Hex;
-import org.apache.commons.codec.digest.DigestUtils;
-import org.torproject.descriptor.DescriptorCollector;
-import org.torproject.descriptor.DescriptorSourceFactory;
 
 /* Import Tor descriptors into the ExoneraTor database. */
 public class ExoneraTorDatabaseImporter {
@@ -101,6 +101,7 @@ public class ExoneraTorDatabaseImporter {
 
   /* Callable statements to import data into the database. */
   private static CallableStatement insertStatusentryStatement;
+
   private static CallableStatement insertExitlistentryStatement;
 
   /* Prepare statements for importing data into the database. */
@@ -159,7 +160,9 @@ public class ExoneraTorDatabaseImporter {
   /* Last and next parse histories containing paths of parsed files and
    * last modified times. */
   private static Map<String, Long>
-      lastImportHistory = new HashMap<String, Long>(),
+      lastImportHistory = new HashMap<String, Long>();
+
+  private static Map<String, Long>
       nextImportHistory = new HashMap<String, Long>();
 
   /* Read stats/exonerator-import-history file from disk and remember
@@ -224,8 +227,8 @@ public class ExoneraTorDatabaseImporter {
     long lastModified = file.lastModified();
     String filename = file.getName();
     nextImportHistory.put(filename, lastModified);
-    if (!lastImportHistory.containsKey(filename) ||
-        lastImportHistory.get(filename) < lastModified) {
+    if (!lastImportHistory.containsKey(filename)
+        || lastImportHistory.get(filename) < lastModified) {
       try {
         FileInputStream fis = new FileInputStream(file);
         BufferedInputStream bis = new BufferedInputStream(fis);
@@ -264,8 +267,8 @@ public class ExoneraTorDatabaseImporter {
       String startToken = null;
       if (line.equals("network-status-version 3")) {
         startToken = "network-status-version 3";
-      } else if (line.startsWith("Downloaded ") ||
-          line.startsWith("ExitNode ")) {
+      } else if (line.startsWith("Downloaded ")
+          || line.startsWith("ExitNode ")) {
         startToken = "ExitNode ";
       } else {
         System.out.println("Unknown descriptor type in file '" + file
@@ -273,7 +276,8 @@ public class ExoneraTorDatabaseImporter {
         return;
       }
       String splitToken = "\n" + startToken;
-      int length = bytes.length, start = asciiString.indexOf(startToken);
+      int length = bytes.length;
+      int start = asciiString.indexOf(startToken);
       while (start < length) {
         int end = asciiString.indexOf(splitToken, start);
         if (end < 0) {
@@ -298,6 +302,7 @@ public class ExoneraTorDatabaseImporter {
 
   /* Date format to parse UTC timestamps. */
   private static SimpleDateFormat parseFormat;
+
   static {
     parseFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     parseFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -308,32 +313,35 @@ public class ExoneraTorDatabaseImporter {
     try {
       BufferedReader br = new BufferedReader(new StringReader(new String(
           bytes, "US-ASCII")));
-      String line, fingerprint = null, descriptor = null;
+      String line;
+      String fingerprint = null;
+      String descriptor = null;
       Set<String> orAddresses = new HashSet<String>();
       long validAfterMillis = -1L;
       StringBuilder rawStatusentryBuilder = null;
       boolean isRunning = false;
       while ((line = br.readLine()) != null) {
-        if (line.startsWith("vote-status ") &&
-            !line.equals("vote-status consensus")) {
-          System.out.println("File '" + file + "' contains network status "
-              + "*votes*, not network status *consensuses*.  Skipping.");
+        if (line.startsWith("vote-status ")
+            && !line.equals("vote-status consensus")) {
+          System.out.println("File '" + file + "' contains network "
+              + "status *votes*, not network status *consensuses*.  "
+              + "Skipping.");
           return;
         } else if (line.startsWith("valid-after ")) {
           String validAfterTime = line.substring("valid-after ".length());
           try {
-            validAfterMillis = parseFormat.parse(validAfterTime).
-                getTime();
+            validAfterMillis = parseFormat.parse(validAfterTime)
+                .getTime();
           } catch (ParseException e) {
             System.out.println("Could not parse valid-after timestamp in "
                 + "'" + file + "'.  Skipping.");
             return;
           }
-        } else if (line.startsWith("r ") ||
-            line.equals("directory-footer")) {
+        } else if (line.startsWith("r ")
+            || line.equals("directory-footer")) {
           if (isRunning) {
-            byte[] rawStatusentry = rawStatusentryBuilder.toString().
-                getBytes();
+            byte[] rawStatusentry = rawStatusentryBuilder.toString()
+                .getBytes();
             importStatusentry(validAfterMillis, fingerprint, descriptor,
                 orAddresses, rawStatusentry);
             orAddresses = new HashSet<String>();
@@ -419,10 +427,10 @@ public class ExoneraTorDatabaseImporter {
             addressHexString = addressHexString.replaceFirst("x",
                 String.format("%" + (33 - addressHexString.length())
                 + "s", "0"));
-            if (!addressHexString.contains("x") &&
-                addressHexString.length() == 32) {
-              orAddress48 = addressHexString.replaceAll(" ", "0").
-                  toLowerCase().substring(0, 12);
+            if (!addressHexString.contains("x")
+                && addressHexString.length() == 32) {
+              orAddress48 = addressHexString.replaceAll(" ", "0")
+                  .toLowerCase().substring(0, 12);
             }
           }
           if (orAddress48 != null) {
@@ -455,8 +463,8 @@ public class ExoneraTorDatabaseImporter {
       StringBuilder rawExitlistentryBuilder = new StringBuilder();
       while (true) {
         String line = br.readLine();
-        if ((line == null || line.startsWith("ExitNode ")) &&
-            fingerprint != null) {
+        if ((line == null || line.startsWith("ExitNode "))
+            && fingerprint != null) {
           for (String exitAddressLine : exitAddressLines) {
             String[] parts = exitAddressLine.split(" ");
             String exitAddress = parts[1];
@@ -481,8 +489,8 @@ public class ExoneraTorDatabaseImporter {
                   + "'" + file + "'.  Skipping.");
               return;
             }
-            byte[] rawExitlistentry = rawExitlistentryBuilder.toString().
-                getBytes();
+            byte[] rawExitlistentry = rawExitlistentryBuilder.toString()
+                .getBytes();
             importExitlistentry(fingerprint, exitAddress24, exitAddress,
                 scannedMillis, rawExitlistentry);
           }
@@ -494,8 +502,8 @@ public class ExoneraTorDatabaseImporter {
         }
         rawExitlistentryBuilder.append(line + "\n");
         if (line.startsWith("ExitNode ")) {
-          fingerprint = line.substring("ExitNode ".length()).
-              toLowerCase();
+          fingerprint = line.substring("ExitNode ".length())
+              .toLowerCase();
         } else if (line.startsWith("ExitAddress ")) {
           exitAddressLines.add(line);
         }

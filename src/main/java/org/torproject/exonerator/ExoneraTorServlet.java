@@ -1,6 +1,10 @@
-/* Copyright 2011--2015 The Tor Project
+/* Copyright 2011--2016 The Tor Project
  * See LICENSE for licensing information */
+
 package org.torproject.exonerator;
+
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.lang.StringEscapeUtils;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -31,9 +35,6 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.sql.DataSource;
-
-import org.apache.commons.codec.binary.Hex;
-import org.apache.commons.lang.StringEscapeUtils;
 
 public class ExoneraTorServlet extends HttpServlet {
 
@@ -113,8 +114,8 @@ public class ExoneraTorServlet extends HttpServlet {
     if (timestampStr != null && timestampStr.length() > 0) {
       try {
         timestamp = dateFormat.parse(timestampParameter).getTime();
-        if (timestamp < firstAndLastDates[0] ||
-            timestamp > firstAndLastDates[1]) {
+        if (timestamp < firstAndLastDates[0]
+            || timestamp > firstAndLastDates[1]) {
           timestampOutOfRange = true;
         }
       } catch (ParseException e) {
@@ -123,12 +124,12 @@ public class ExoneraTorServlet extends HttpServlet {
     }
 
     /* Write form. */
-    this.writeForm(out, rb, relayIP, relayIPHasError ||
-        ("".equals(relayIP) && !"".equals(timestampStr)), timestampStr,
-        !relayIPHasError &&
-        !("".equals(relayIP) && !"".equals(timestampStr)) &&
-        (timestampHasError || timestampOutOfRange ||
-        (!"".equals(relayIP) && "".equals(timestampStr))));
+    this.writeForm(out, rb, relayIP, relayIPHasError
+        || ("".equals(relayIP) && !"".equals(timestampStr)), timestampStr,
+        !relayIPHasError
+        && !("".equals(relayIP) && !"".equals(timestampStr))
+        && (timestampHasError || timestampOutOfRange
+        || (!"".equals(relayIP) && "".equals(timestampStr))));
 
     /* If both parameters are empty, don't print any summary and exit.
      * This is the start page. */
@@ -219,8 +220,8 @@ public class ExoneraTorServlet extends HttpServlet {
       this.writeSummaryPositive(out, rb, relayIP, timestampStr);
       this.writeTechnicalDetails(out, rb, relayIP, timestampStr,
           statusEntries);
-    } else if (addressesInSameNetwork != null &&
-        !addressesInSameNetwork.isEmpty()) {
+    } else if (addressesInSameNetwork != null
+        && !addressesInSameNetwork.isEmpty()) {
       this.writeSummaryAddressesInSameNetwork(out, rb, relayIP,
           timestampStr, addressesInSameNetwork);
     } else {
@@ -240,10 +241,10 @@ public class ExoneraTorServlet extends HttpServlet {
     if (passedIpParameter != null && passedIpParameter.length() > 0) {
       String ipParameter = passedIpParameter.trim();
       Pattern ipv4AddressPattern = Pattern.compile(
-          "^([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." +
-          "([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." +
-          "([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." +
-          "([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
+          "^([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\."
+          + "([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\."
+          + "([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\."
+          + "([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
       Pattern ipv6AddressPattern = Pattern.compile(
           "^\\[?[0-9a-fA-F:]{3,39}\\]?$");
       if (ipv4AddressPattern.matcher(ipParameter).matches()) {
@@ -278,8 +279,8 @@ public class ExoneraTorServlet extends HttpServlet {
           addressHexString = addressHexString.replaceFirst("x",
               String.format("%" + (33 - addressHexString.length()) + "s",
               "0"));
-          if (!addressHexString.contains("x") &&
-              addressHexString.length() == 32) {
+          if (!addressHexString.contains("x")
+              && addressHexString.length() == 32) {
             relayIP = ipParameter.toLowerCase();
           }
         }
@@ -325,10 +326,10 @@ public class ExoneraTorServlet extends HttpServlet {
       addressHexString = addressHexString.replaceFirst("x",
           String.format("%" + (33 - addressHexString.length())
           + "s", "0"));
-      if (!addressHexString.contains("x") &&
-          addressHexString.length() == 32) {
-        address48 = addressHexString.replaceAll(" ", "0").
-            toLowerCase();
+      if (!addressHexString.contains("x")
+          && addressHexString.length() == 32) {
+        address48 = addressHexString.replaceAll(" ", "0")
+            .toLowerCase();
       }
     }
     return address48;
@@ -340,8 +341,8 @@ public class ExoneraTorServlet extends HttpServlet {
     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
     dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
     dateFormat.setLenient(false);
-    if (passedTimestampParameter != null &&
-        passedTimestampParameter.length() > 0) {
+    if (passedTimestampParameter != null
+        && passedTimestampParameter.length() > 0) {
       String timestampParameter = passedTimestampParameter.trim();
       try {
         long timestamp = dateFormat.parse(timestampParameter).getTime();
@@ -436,8 +437,8 @@ public class ExoneraTorServlet extends HttpServlet {
       ResultSet rs = cs.executeQuery();
       while (rs.next()) {
         byte[] rawstatusentry = rs.getBytes(1);
-        SortedSet<String> addresses = new TreeSet<String>(),
-            addressesHex = new TreeSet<String>();
+        SortedSet<String> addresses = new TreeSet<String>();
+        SortedSet<String> addressesHex = new TreeSet<String>();
         long validafter = rs.getTimestamp(2, utcCalendar).getTime();
         String validAfterString = validAfterTimeFormat.format(validafter);
         String fingerprint = rs.getString(3).toUpperCase();
@@ -627,8 +628,8 @@ public class ExoneraTorServlet extends HttpServlet {
         ipValue,
         timestampHasError ? " has-error" : "",
         rb.getString("form.timestamp.label"),
-        timestampStr != null && timestampStr.length() > 0 ?
-            " value=\"" + timestampStr + "\"" : "",
+        timestampStr != null && timestampStr.length() > 0
+            ? " value=\"" + timestampStr + "\"" : "",
         rb.getString("form.search.label"));
   }
 
@@ -685,8 +686,8 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private void writeSummaryInvalidIp(PrintWriter out, ResourceBundle rb,
       String ipParameter) throws IOException {
-    String escapedIpParameter = ipParameter.length() > 40 ?
-        StringEscapeUtils.escapeHtml(ipParameter.substring(0, 40))
+    String escapedIpParameter = ipParameter.length() > 40
+        ? StringEscapeUtils.escapeHtml(ipParameter.substring(0, 40))
         + "[...]" : StringEscapeUtils.escapeHtml(ipParameter);
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-danger",
@@ -697,10 +698,10 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private void writeSummaryInvalidTimestamp(PrintWriter out,
       ResourceBundle rb, String timestampParameter) throws IOException {
-    String escapedTimestampParameter = timestampParameter.length() > 20 ?
-        StringEscapeUtils.escapeHtml(timestampParameter.
-        substring(0, 20)) + "[...]" :
-        StringEscapeUtils.escapeHtml(timestampParameter);
+    String escapedTimestampParameter = timestampParameter.length() > 20
+        ? StringEscapeUtils.escapeHtml(timestampParameter
+        .substring(0, 20)) + "[...]"
+        : StringEscapeUtils.escapeHtml(timestampParameter);
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-danger",
         rb.getString("summary.invalidparams.invalidtimestamp.title"),
@@ -727,7 +728,8 @@ public class ExoneraTorServlet extends HttpServlet {
     Object[][] panelItems = new Object[addressesInSameNetwork.size()][];
     for (int i = 0; i < addressesInSameNetwork.size(); i++) {
       String addressInSameNetwork = addressesInSameNetwork.get(i);
-      String link, address;
+      String link;
+      String address;
       if (addressInSameNetwork.contains(":")) {
         link = String.format("/?ip=[%s]&timestamp=%s",
             addressInSameNetwork.replaceAll(":", "%3A"), timestampStr);
@@ -748,8 +750,8 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private void writeSummaryPositive(PrintWriter out, ResourceBundle rb,
       String relayIP, String timestampStr) throws IOException {
-    String formattedRelayIP = relayIP.contains(":") ?
-        "[" + relayIP + "]" : relayIP;
+    String formattedRelayIP = relayIP.contains(":")
+        ? "[" + relayIP + "]" : relayIP;
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-success", rb.getString("summary.positive.title"), null,
         rb.getString("summary.positive.body"), formattedRelayIP,
@@ -758,8 +760,8 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private void writeSummaryNegative(PrintWriter out, ResourceBundle rb,
       String relayIP, String timestampStr) throws IOException {
-    String formattedRelayIP = relayIP.contains(":") ?
-        "[" + relayIP + "]" : relayIP;
+    String formattedRelayIP = relayIP.contains(":")
+        ? "[" + relayIP + "]" : relayIP;
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-warning", rb.getString("summary.negative.title"), null,
         rb.getString("summary.negative.body"), formattedRelayIP,
@@ -797,8 +799,8 @@ public class ExoneraTorServlet extends HttpServlet {
   private void writeTechnicalDetails(PrintWriter out, ResourceBundle rb,
       String relayIP, String timestampStr, List<String[]> tableRows)
       throws IOException {
-    String formattedRelayIP = relayIP.contains(":") ?
-        "[" + relayIP + "]" : relayIP;
+    String formattedRelayIP = relayIP.contains(":")
+        ? "[" + relayIP + "]" : relayIP;
     out.printf("      <div class=\"row\">\n"
         + "        <div class=\"col-xs-12\">\n"
         + "          <h2>%s</h2>\n"
@@ -853,8 +855,8 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private void writePermanentLink(PrintWriter out, ResourceBundle rb,
       String relayIP, String timestampStr) throws IOException {
-    String encodedAddress = relayIP.contains(":") ?
-        "[" + relayIP.replaceAll(":", "%3A") + "]" : relayIP;
+    String encodedAddress = relayIP.contains(":")
+        ? "[" + relayIP.replaceAll(":", "%3A") + "]" : relayIP;
     out.printf("      <div class=\"row\">\n"
         + "        <div class=\"col-xs-12\">\n"
         + "          <h2>%s</h2>\n"
