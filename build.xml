@@ -1,7 +1,7 @@
 <project default="run" name="exonerator" basedir=".">
 
   <!-- Define build paths. -->
-  <property name="sources" value="src"/>
+  <property name="sources" value="src/main/java"/>
   <property name="resources" value="res"/>
   <property name="classes" value="classes"/>
   <property name="libs" value="lib"/>
