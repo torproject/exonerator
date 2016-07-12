@@ -44,6 +44,7 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private Logger logger;
 
+  @Override
   public void init() {
 
     /* Initialize logger. */
@@ -59,6 +60,7 @@ public class ExoneraTorServlet extends HttpServlet {
     }
   }
 
+  @Override
   public void doGet(HttpServletRequest request,
       HttpServletResponse response) throws IOException,
       ServletException {
@@ -99,8 +101,8 @@ public class ExoneraTorServlet extends HttpServlet {
 
     /* Parse parameters. */
     String ipParameter = request.getParameter("ip");
-    String relayIP = this.parseIpParameter(ipParameter);
-    boolean relayIPHasError = relayIP == null;
+    String relayIp = this.parseIpParameter(ipParameter);
+    boolean relayIpHasError = relayIp == null;
 
     /* Parse timestamp parameter. */
     String timestampParameter = request.getParameter("timestamp");
@@ -124,16 +126,16 @@ public class ExoneraTorServlet extends HttpServlet {
     }
 
     /* Write form. */
-    this.writeForm(out, rb, relayIP, relayIPHasError
-        || ("".equals(relayIP) && !"".equals(timestampStr)), timestampStr,
-        !relayIPHasError
-        && !("".equals(relayIP) && !"".equals(timestampStr))
+    this.writeForm(out, rb, relayIp, relayIpHasError
+        || ("".equals(relayIp) && !"".equals(timestampStr)), timestampStr,
+        !relayIpHasError
+        && !("".equals(relayIp) && !"".equals(timestampStr))
         && (timestampHasError || timestampOutOfRange
-        || (!"".equals(relayIP) && "".equals(timestampStr))));
+        || (!"".equals(relayIp) && "".equals(timestampStr))));
 
     /* If both parameters are empty, don't print any summary and exit.
      * This is the start page. */
-    if ("".equals(relayIP) && "".equals(timestampStr)) {
+    if ("".equals(relayIp) && "".equals(timestampStr)) {
       this.writeFooter(out, rb);
       this.closeDatabaseConnection(conn, requestedConnection);
       return;
@@ -141,8 +143,8 @@ public class ExoneraTorServlet extends HttpServlet {
 
     /* If either parameter is empty, print summary with warning message
      * and exit. */
-    if ("".equals(relayIP) || "".equals(timestampStr)) {
-      if ("".equals(relayIP)) {
+    if ("".equals(relayIp) || "".equals(timestampStr)) {
+      if ("".equals(relayIp)) {
         writeSummaryNoIp(out, rb);
       } else {
         writeSummaryNoTimestamp(out, rb);
@@ -154,8 +156,8 @@ public class ExoneraTorServlet extends HttpServlet {
 
     /* If there's a user error, print summary with exit message and
      * exit. */
-    if (relayIPHasError || timestampHasError || timestampOutOfRange) {
-      if (relayIPHasError) {
+    if (relayIpHasError || timestampHasError || timestampOutOfRange) {
+      if (relayIpHasError) {
         this.writeSummaryInvalidIp(out, rb, ipParameter);
       } else if (timestampHasError) {
         this.writeSummaryInvalidTimestamp(out, rb, timestampParameter);
@@ -190,7 +192,7 @@ public class ExoneraTorServlet extends HttpServlet {
     /* Search for status entries with the given IP address as onion
      * routing address, plus status entries of relays having an exit list
      * entry with the given IP address as exit address. */
-    List<String[]> statusEntries = this.queryStatusEntries(conn, relayIP,
+    List<String[]> statusEntries = this.queryStatusEntries(conn, relayIp,
         timestamp, validAfterTimeFormat);
 
     /* If we didn't find anything, run another query to find out if there
@@ -199,14 +201,14 @@ public class ExoneraTorServlet extends HttpServlet {
     List<String> addressesInSameNetwork = null;
     if (statusEntries.isEmpty()) {
       addressesInSameNetwork = new ArrayList<String>();
-      if (!relayIP.contains(":")) {
-        String address24 = this.convertIPv4ToHex(relayIP).substring(0, 6);
+      if (!relayIp.contains(":")) {
+        String address24 = this.convertIpV4ToHex(relayIp).substring(0, 6);
         if (address24 != null) {
           addressesInSameNetwork = this.queryAddressesInSame24(conn,
               address24, timestamp);
         }
       } else {
-        String address48 = this.convertIPv6ToHex(relayIP).substring(
+        String address48 = this.convertIpV6ToHex(relayIp).substring(
             0, 12);
         if (address48 != null) {
           addressesInSameNetwork = this.queryAddressesInSame48(conn,
@@ -217,18 +219,18 @@ public class ExoneraTorServlet extends HttpServlet {
 
     /* Print out result. */
     if (!statusEntries.isEmpty()) {
-      this.writeSummaryPositive(out, rb, relayIP, timestampStr);
-      this.writeTechnicalDetails(out, rb, relayIP, timestampStr,
+      this.writeSummaryPositive(out, rb, relayIp, timestampStr);
+      this.writeTechnicalDetails(out, rb, relayIp, timestampStr,
           statusEntries);
     } else if (addressesInSameNetwork != null
         && !addressesInSameNetwork.isEmpty()) {
-      this.writeSummaryAddressesInSameNetwork(out, rb, relayIP,
+      this.writeSummaryAddressesInSameNetwork(out, rb, relayIp,
           timestampStr, addressesInSameNetwork);
     } else {
-      this.writeSummaryNegative(out, rb, relayIP, timestampStr);
+      this.writeSummaryNegative(out, rb, relayIp, timestampStr);
     }
 
-    this.writePermanentLink(out, rb, relayIP, timestampStr);
+    this.writePermanentLink(out, rb, relayIp, timestampStr);
 
     this.closeDatabaseConnection(conn, requestedConnection);
     this.writeFooter(out, rb);
@@ -237,7 +239,7 @@ public class ExoneraTorServlet extends HttpServlet {
   /* Helper methods for handling the request. */
 
   private String parseIpParameter(String passedIpParameter) {
-    String relayIP = null;
+    String relayIp = null;
     if (passedIpParameter != null && passedIpParameter.length() > 0) {
       String ipParameter = passedIpParameter.trim();
       Pattern ipv4AddressPattern = Pattern.compile(
@@ -249,7 +251,7 @@ public class ExoneraTorServlet extends HttpServlet {
           "^\\[?[0-9a-fA-F:]{3,39}\\]?$");
       if (ipv4AddressPattern.matcher(ipParameter).matches()) {
         String[] ipParts = ipParameter.split("\\.");
-        relayIP = Integer.parseInt(ipParts[0]) + "."
+        relayIp = Integer.parseInt(ipParts[0]) + "."
             + Integer.parseInt(ipParts[1]) + "."
             + Integer.parseInt(ipParts[2]) + "."
             + Integer.parseInt(ipParts[3]);
@@ -281,34 +283,34 @@ public class ExoneraTorServlet extends HttpServlet {
               "0"));
           if (!addressHexString.contains("x")
               && addressHexString.length() == 32) {
-            relayIP = ipParameter.toLowerCase();
+            relayIp = ipParameter.toLowerCase();
           }
         }
       }
     } else {
-      relayIP = "";
+      relayIp = "";
     }
-    return relayIP;
+    return relayIp;
   }
 
-  private String convertIPv4ToHex(String relayIP) {
-    String[] relayIPParts = relayIP.split("\\.");
+  private String convertIpV4ToHex(String relayIp) {
+    String[] relayIpParts = relayIp.split("\\.");
     byte[] address24Bytes = new byte[4];
     for (int i = 0; i < address24Bytes.length; i++) {
-      address24Bytes[i] = (byte) Integer.parseInt(relayIPParts[i]);
+      address24Bytes[i] = (byte) Integer.parseInt(relayIpParts[i]);
     }
     String address24 = Hex.encodeHexString(address24Bytes);
     return address24;
   }
 
-  private String convertIPv6ToHex(String relayIP) {
-    if (relayIP.startsWith("[") && relayIP.endsWith("]")) {
-      relayIP = relayIP.substring(1, relayIP.length() - 1);
+  private String convertIpV6ToHex(String relayIp) {
+    if (relayIp.startsWith("[") && relayIp.endsWith("]")) {
+      relayIp = relayIp.substring(1, relayIp.length() - 1);
     }
     StringBuilder addressHex = new StringBuilder();
-    int start = relayIP.startsWith("::") ? 1 : 0;
-    int end = relayIP.length() - (relayIP.endsWith("::") ? 1 : 0);
-    String[] parts = relayIP.substring(start, end).split(":", -1);
+    int start = relayIp.startsWith("::") ? 1 : 0;
+    int end = relayIp.length() - (relayIp.endsWith("::") ? 1 : 0);
+    String[] parts = relayIp.substring(start, end).split(":", -1);
     for (int i = 0; i < parts.length; i++) {
       String part = parts[i];
       if (part.length() == 0) {
@@ -361,6 +363,7 @@ public class ExoneraTorServlet extends HttpServlet {
     try {
       conn = this.ds.getConnection();
     } catch (SQLException e) {
+      this.logger.log(Level.WARNING, "Couldn't connect: " + e.getMessage(), e);
     }
     return conn;
   }
@@ -413,19 +416,19 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private List<String[]> queryStatusEntries(Connection conn,
-      String relayIP, long timestamp,
+      String relayIp, long timestamp,
       SimpleDateFormat validAfterTimeFormat) {
     List<String[]> statusEntries = new ArrayList<String[]>();
-    String addressHex = !relayIP.contains(":")
-        ? this.convertIPv4ToHex(relayIP) : this.convertIPv6ToHex(relayIP);
+    String addressHex = !relayIp.contains(":")
+        ? this.convertIpV4ToHex(relayIp) : this.convertIpV6ToHex(relayIp);
     if (addressHex == null) {
       return null;
     }
-    String address24Or48Hex = !relayIP.contains(":")
+    String address24Or48Hex = !relayIp.contains(":")
         ? addressHex.substring(0, 6) : addressHex.substring(0, 12);
     try {
       CallableStatement cs;
-      if (!relayIP.contains(":")) {
+      if (!relayIp.contains(":")) {
         cs = conn.prepareCall("{call search_by_address24_date(?, ?)}");
       } else {
         cs = conn.prepareCall("{call search_by_address48_date(?, ?)}");
@@ -439,9 +442,6 @@ public class ExoneraTorServlet extends HttpServlet {
         byte[] rawstatusentry = rs.getBytes(1);
         SortedSet<String> addresses = new TreeSet<String>();
         SortedSet<String> addressesHex = new TreeSet<String>();
-        long validafter = rs.getTimestamp(2, utcCalendar).getTime();
-        String validAfterString = validAfterTimeFormat.format(validafter);
-        String fingerprint = rs.getString(3).toUpperCase();
         String nickname = null;
         String exit = "U";
         for (String line : new String(rawstatusentry).split("\n")) {
@@ -449,14 +449,14 @@ public class ExoneraTorServlet extends HttpServlet {
             String[] parts = line.split(" ");
             nickname = parts[1];
             addresses.add(parts[6]);
-            addressesHex.add(this.convertIPv4ToHex(parts[6]));
+            addressesHex.add(this.convertIpV4ToHex(parts[6]));
           } else if (line.startsWith("a ")) {
             String address = line.substring("a ".length(),
                 line.lastIndexOf(":"));
             addresses.add(address);
             String orAddressHex = !address.contains(":")
-                ? this.convertIPv4ToHex(address)
-                : this.convertIPv6ToHex(address);
+                ? this.convertIpV4ToHex(address)
+                : this.convertIpV6ToHex(address);
             addressesHex.add(orAddressHex);
           } else if (line.startsWith("p ")) {
             exit = line.equals("p reject 1-65535") ? "N" : "Y";
@@ -465,7 +465,7 @@ public class ExoneraTorServlet extends HttpServlet {
         String exitaddress = rs.getString(4);
         if (exitaddress != null && exitaddress.length() > 0) {
           addresses.add(exitaddress);
-          addressesHex.add(this.convertIPv4ToHex(exitaddress));
+          addressesHex.add(this.convertIpV4ToHex(exitaddress));
         }
         if (!addressesHex.contains(addressHex)) {
           continue;
@@ -475,6 +475,9 @@ public class ExoneraTorServlet extends HttpServlet {
         for (String address : addresses) {
           sb.append((writtenAddresses++ > 0 ? ", " : "") + address);
         }
+        long validafter = rs.getTimestamp(2, utcCalendar).getTime();
+        String validAfterString = validAfterTimeFormat.format(validafter);
+        String fingerprint = rs.getString(3).toUpperCase();
         String[] statusEntry = new String[] { validAfterString,
             sb.toString(), fingerprint, nickname, exit };
         statusEntries.add(statusEntry);
@@ -544,6 +547,7 @@ public class ExoneraTorServlet extends HttpServlet {
           + "after " + (System.currentTimeMillis()
           - requestedConnection) + " millis.");
     } catch (SQLException e) {
+      this.logger.log(Level.WARNING, "Couldn't close: " + e.getMessage(), e);
     }
     return;
   }
@@ -585,14 +589,14 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writeForm(PrintWriter out, ResourceBundle rb,
-      String relayIP, boolean relayIPHasError, String timestampStr,
+      String relayIp, boolean relayIpHasError, String timestampStr,
       boolean timestampHasError) throws IOException {
     String ipValue = "";
-    if (relayIP != null && relayIP.length() > 0) {
-      if (relayIP.contains(":")) {
-        ipValue = String.format(" value=\"[%s]\"", relayIP);
+    if (relayIp != null && relayIp.length() > 0) {
+      if (relayIp.contains(":")) {
+        ipValue = String.format(" value=\"[%s]\"", relayIp);
       } else {
-        ipValue = String.format(" value=\"%s\"", relayIP);
+        ipValue = String.format(" value=\"%s\"", relayIp);
       }
     }
     out.printf("      <div class=\"row\">\n"
@@ -623,7 +627,7 @@ public class ExoneraTorServlet extends HttpServlet {
         + "        </div><!-- col -->\n"
         + "      </div><!-- row -->\n",
         rb.getString("form.explanation"),
-        relayIPHasError ? " has-error" : "",
+        relayIpHasError ? " has-error" : "",
         rb.getString("form.ip.label"),
         ipValue,
         timestampHasError ? " has-error" : "",
@@ -723,7 +727,7 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writeSummaryAddressesInSameNetwork(PrintWriter out,
-      ResourceBundle rb, String relayIP, String timestampStr,
+      ResourceBundle rb, String relayIp, String timestampStr,
       List<String> addressesInSameNetwork) throws IOException {
     Object[][] panelItems = new Object[addressesInSameNetwork.size()][];
     for (int i = 0; i < addressesInSameNetwork.size(); i++) {
@@ -745,26 +749,26 @@ public class ExoneraTorServlet extends HttpServlet {
         "panel-warning",
         rb.getString("summary.negativesamenetwork.title"), panelItems,
         rb.getString("summary.negativesamenetwork.body"),
-        relayIP, timestampStr, relayIP.contains(":") ? 48 : 24);
+        relayIp, timestampStr, relayIp.contains(":") ? 48 : 24);
   }
 
   private void writeSummaryPositive(PrintWriter out, ResourceBundle rb,
-      String relayIP, String timestampStr) throws IOException {
-    String formattedRelayIP = relayIP.contains(":")
-        ? "[" + relayIP + "]" : relayIP;
+      String relayIp, String timestampStr) throws IOException {
+    String formattedRelayIp = relayIp.contains(":")
+        ? "[" + relayIp + "]" : relayIp;
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-success", rb.getString("summary.positive.title"), null,
-        rb.getString("summary.positive.body"), formattedRelayIP,
+        rb.getString("summary.positive.body"), formattedRelayIp,
         timestampStr);
   }
 
   private void writeSummaryNegative(PrintWriter out, ResourceBundle rb,
-      String relayIP, String timestampStr) throws IOException {
-    String formattedRelayIP = relayIP.contains(":")
-        ? "[" + relayIP + "]" : relayIP;
+      String relayIp, String timestampStr) throws IOException {
+    String formattedRelayIp = relayIp.contains(":")
+        ? "[" + relayIp + "]" : relayIp;
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-warning", rb.getString("summary.negative.title"), null,
-        rb.getString("summary.negative.body"), formattedRelayIP,
+        rb.getString("summary.negative.body"), formattedRelayIp,
         timestampStr);
   }
 
@@ -797,10 +801,10 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writeTechnicalDetails(PrintWriter out, ResourceBundle rb,
-      String relayIP, String timestampStr, List<String[]> tableRows)
+      String relayIp, String timestampStr, List<String[]> tableRows)
       throws IOException {
-    String formattedRelayIP = relayIP.contains(":")
-        ? "[" + relayIP + "]" : relayIP;
+    String formattedRelayIp = relayIp.contains(":")
+        ? "[" + relayIp + "]" : relayIp;
     out.printf("      <div class=\"row\">\n"
         + "        <div class=\"col-xs-12\">\n"
         + "          <h2>%s</h2>\n"
@@ -818,7 +822,7 @@ public class ExoneraTorServlet extends HttpServlet {
         + "            <tbody>\n",
         rb.getString("technicaldetails.heading"),
         String.format(rb.getString("technicaldetails.pre"),
-            formattedRelayIP, timestampStr),
+            formattedRelayIp, timestampStr),
         rb.getString("technicaldetails.colheader.timestamp"),
         rb.getString("technicaldetails.colheader.ip"),
         rb.getString("technicaldetails.colheader.fingerprint"),
@@ -854,9 +858,9 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writePermanentLink(PrintWriter out, ResourceBundle rb,
-      String relayIP, String timestampStr) throws IOException {
-    String encodedAddress = relayIP.contains(":")
-        ? "[" + relayIP.replaceAll(":", "%3A") + "]" : relayIP;
+      String relayIp, String timestampStr) throws IOException {
+    String encodedAddress = relayIp.contains(":")
+        ? "[" + relayIp.replaceAll(":", "%3A") + "]" : relayIp;
     out.printf("      <div class=\"row\">\n"
         + "        <div class=\"col-xs-12\">\n"
         + "          <h2>%s</h2>\n"

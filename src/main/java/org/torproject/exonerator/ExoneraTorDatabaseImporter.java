@@ -38,7 +38,7 @@ import java.util.TimeZone;
 /* Import Tor descriptors into the ExoneraTor database. */
 public class ExoneraTorDatabaseImporter {
 
-  /* Main function controlling the parsing process. */
+  /** Main function controlling the parsing process. */
   public static void main(String[] args) {
     readConfiguration();
     openDatabaseConnection();
@@ -154,7 +154,7 @@ public class ExoneraTorDatabaseImporter {
         DescriptorSourceFactory.createDescriptorCollector();
     collector.collectDescriptors("https://collector.torproject.org",
         new String[] { "/recent/relay-descriptors/consensuses/",
-        "/recent/exit-lists/" }, 0L, new File(importDirString), true);
+            "/recent/exit-lists/" }, 0L, new File(importDirString), true);
   }
 
   /* Last and next parse histories containing paths of parsed files and
