@@ -16,10 +16,6 @@ CREATE TABLE statusentry (
   -- relay.
   fingerprint CHARACTER(40) NOT NULL,
 
-  -- The 40-character lower-case hex string that identifies the server
-  -- descriptor published by the relay.
-  descriptor CHARACTER(40) NOT NULL,
-
   -- The most significant 3 bytes of the relay's onion routing IPv4
   -- address in lower-case hex notation, or null if the relay's onion
   -- routing address in this status entry is IPv6.  The purpose is to
@@ -99,10 +95,6 @@ CREATE TABLE exitlistentry (
   -- address(es).
   scanned TIMESTAMP WITHOUT TIME ZONE NOT NULL,
 
-  -- The raw exit list entry containing all scan results for a given relay
-  -- for display purposes.
-  rawexitlistentry BYTEA NOT NULL,
-
   -- An exit list entry is uniquely identified by its scan time, relay
   -- fingerprint, and exit address.
   CONSTRAINT exitlistentry_pkey
@@ -127,7 +119,8 @@ CREATE LANGUAGE plpgsql;
 -- Insert a status entry into the statusentry table.  First check that
 -- this status entry isn't contained in the table yet.  It's okay to
 -- insert the same status entry multiple times for different IP addresses
--- though.  Return 1 if it was inserted, 0 otherwise.
+-- though.  Return 1 if it was inserted, 0 otherwise.  (Removed
+-- statusentry.descriptor from table on August 17, 2016.)
 CREATE OR REPLACE FUNCTION insert_statusentry (
     insert_validafter TIMESTAMP WITHOUT TIME ZONE,
     insert_fingerprint CHARACTER(40),
@@ -146,10 +139,10 @@ CREATE OR REPLACE FUNCTION insert_statusentry (
         AND fingerprint = insert_fingerprint
         AND oraddress = insert_oraddress::INET) = 0 THEN
       -- Insert the status entry.
-      INSERT INTO statusentry (validafter, fingerprint, descriptor,
+      INSERT INTO statusentry (validafter, fingerprint,
             oraddress24, oraddress48, oraddress, rawstatusentry)
           VALUES (insert_validafter, insert_fingerprint,
-            insert_descriptor, insert_oraddress24, insert_oraddress48,
+            insert_oraddress24, insert_oraddress48,
             insert_oraddress::INET, insert_rawstatusentry);
       -- Return 1 for a successfully inserted status entry.
       RETURN 1;
@@ -163,7 +156,8 @@ $$ LANGUAGE 'plpgsql';
 -- Insert an exit list entry into the exitlistentry table.  Check that
 -- this entry hasn't been inserted before.  It's okay to insert the same
 -- exit list entry multiple times for different exit addresses.  Return 1
--- if the entry was inserted, 0 otherwise.
+-- if the entry was inserted, 0 otherwise.  (Removed
+-- exitlistentry.rawexitlistentry from table on August 17, 2016.)
 CREATE OR REPLACE FUNCTION insert_exitlistentry (
     insert_fingerprint CHARACTER(40),
     insert_exitaddress24 CHARACTER(6),
@@ -179,10 +173,9 @@ CREATE OR REPLACE FUNCTION insert_exitlistentry (
         AND scanned = insert_scanned) = 0 THEN
       -- This exit list entry is not in the database yet.  Add it.
       INSERT INTO exitlistentry (fingerprint, exitaddress24, exitaddress,
-            scanned, rawexitlistentry)
+            scanned)
           VALUES (insert_fingerprint, insert_exitaddress24,
-            insert_exitaddress::INET, insert_scanned,
-            insert_rawexitlistentry);
+            insert_exitaddress::INET, insert_scanned);
       -- Return 1 for a successfully inserted exit list entry.
       RETURN 1;
     ELSE
