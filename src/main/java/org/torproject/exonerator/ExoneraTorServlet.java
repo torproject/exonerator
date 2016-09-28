@@ -67,14 +67,15 @@ public class ExoneraTorServlet extends HttpServlet {
 
     /* Set content type, or the page doesn't render in Chrome. */
     response.setContentType("text/html");
-
-    /* Start writing response. */
-    PrintWriter out = response.getWriter();
-    this.writeHeader(out);
+    response.setCharacterEncoding("utf-8");
 
     /* Find the right resource bundle for the user's locale. */
     Locale locale = request.getLocale();
     ResourceBundle rb = ResourceBundle.getBundle("ExoneraTor", locale);
+
+    /* Start writing response. */
+    PrintWriter out = response.getWriter();
+    this.writeHeader(out, rb);
 
     /* Open a database connection that we'll use to handle the whole
      * request. */
@@ -554,9 +555,10 @@ public class ExoneraTorServlet extends HttpServlet {
 
   /* Helper methods for writing the response. */
 
-  private void writeHeader(PrintWriter out) throws IOException {
-    out.println("<!DOCTYPE html>\n"
-        + "<html lang=\"en\">\n"
+  private void writeHeader(PrintWriter out, ResourceBundle rb)
+      throws IOException {
+    out.printf("<!DOCTYPE html>\n"
+        + "<html lang=\"%s\">\n"
         + "  <head>\n"
         + "    <meta charset=\"utf-8\">\n"
         + "    <meta http-equiv=\"X-UA-Compatible\" "
@@ -585,7 +587,8 @@ public class ExoneraTorServlet extends HttpServlet {
         + "            </h1>\n"
         + "          </div><!-- page-header -->\n"
         + "        </div><!-- col -->\n"
-        + "      </div><!-- row -->\n");
+        + "      </div><!-- row -->\n",
+        rb.getLocale().getLanguage());
   }
 
   private void writeForm(PrintWriter out, ResourceBundle rb,
