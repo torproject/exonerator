@@ -73,7 +73,7 @@ $ sudo -u postgres createdb -O exonerator exonerator
 
 Import the exonerator database schema.
 
-$ psql -f /srv/exonerator.torproject.org/exonerator/db/exonerator.sql \
+$ psql -f /srv/exonerator.torproject.org/exonerator/src/main/resources/db/exonerator.sql \
   exonerator
 
 Confirm that the database now contains tables to hold ExoneraTor data.  In
