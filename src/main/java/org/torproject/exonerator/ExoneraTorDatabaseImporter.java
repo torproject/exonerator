@@ -3,37 +3,39 @@
 
 package org.torproject.exonerator;
 
+import org.torproject.descriptor.Descriptor;
 import org.torproject.descriptor.DescriptorCollector;
+import org.torproject.descriptor.DescriptorFile;
+import org.torproject.descriptor.DescriptorReader;
 import org.torproject.descriptor.DescriptorSourceFactory;
+import org.torproject.descriptor.ExitList;
+import org.torproject.descriptor.ExitList.Entry;
+import org.torproject.descriptor.NetworkStatusEntry;
+import org.torproject.descriptor.RelayNetworkStatusConsensus;
 
-import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.codec.binary.Hex;
 
-import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.StringReader;
 import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
-import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
-import java.util.Stack;
+import java.util.SortedMap;
 import java.util.TimeZone;
+import java.util.TreeMap;
 
 /* Import Tor descriptors into the ExoneraTor database. */
 public class ExoneraTorDatabaseImporter {
@@ -159,11 +161,11 @@ public class ExoneraTorDatabaseImporter {
 
   /* Last and next parse histories containing paths of parsed files and
    * last modified times. */
-  private static Map<String, Long>
-      lastImportHistory = new HashMap<String, Long>();
+  private static SortedMap<String, Long>
+      lastImportHistory = new TreeMap<String, Long>();
 
-  private static Map<String, Long>
-      nextImportHistory = new HashMap<String, Long>();
+  private static SortedMap<String, Long>
+      nextImportHistory = new TreeMap<String, Long>();
 
   /* Read stats/exonerator-import-history file from disk and remember
    * locally when files were last parsed. */
@@ -201,103 +203,26 @@ public class ExoneraTorDatabaseImporter {
 
   /* Parse descriptors in the import directory and its subdirectories. */
   private static void parseDescriptors() {
-    File file = new File(importDirString);
-    if (!file.exists()) {
-      System.out.println("File or directory " + importDirString + " does "
-          + "not exist.  Exiting.");
-      return;
-    }
-    Stack<File> files = new Stack<File>();
-    files.add(file);
-    while (!files.isEmpty()) {
-      file = files.pop();
-      if (file.isDirectory()) {
-        for (File f : file.listFiles()) {
-          files.add(f);
+    DescriptorReader descriptorReader =
+        DescriptorSourceFactory.createDescriptorReader();
+    descriptorReader.addDirectory(new File(importDirString));
+    descriptorReader.setMaxDescriptorFilesInQueue(20);
+    descriptorReader.setExcludedFiles(lastImportHistory);
+    Iterator<DescriptorFile> descriptorFiles =
+        descriptorReader.readDescriptors();
+    while (descriptorFiles.hasNext()) {
+      DescriptorFile descriptorFile = descriptorFiles.next();
+      for (Descriptor descriptor : descriptorFile.getDescriptors()) {
+        if (descriptor instanceof RelayNetworkStatusConsensus) {
+          parseConsensus((RelayNetworkStatusConsensus) descriptor);
+        } else if (descriptor instanceof ExitList) {
+          parseExitList((ExitList) descriptor);
         }
-      } else {
-        parseFile(file);
-      }
-    }
-  }
-
-  /* Import a file if it wasn't imported before, and add it to the import
-   * history for the next execution. */
-  private static void parseFile(File file) {
-    long lastModified = file.lastModified();
-    String filename = file.getName();
-    nextImportHistory.put(filename, lastModified);
-    if (!lastImportHistory.containsKey(filename)
-        || lastImportHistory.get(filename) < lastModified) {
-      try {
-        FileInputStream fis = new FileInputStream(file);
-        BufferedInputStream bis = new BufferedInputStream(fis);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        int len;
-        byte[] bytes = new byte[1024];
-        while ((len = bis.read(bytes, 0, 1024)) >= 0) {
-          baos.write(bytes, 0, len);
-        }
-        bis.close();
-        byte[] allBytes = baos.toByteArray();
-        splitFile(file, allBytes);
-      } catch (IOException e) {
-        System.out.println("Could not read '" + file + "' to memory.  "
-            + "Skipping.");
-        nextImportHistory.remove(filename);
       }
     }
-  }
-
-  /* Detect what descriptor type is contained in a file and split it to
-   * parse the single descriptors. */
-  private static void splitFile(File file, byte[] bytes) {
-    try {
-      String asciiString = new String(bytes, "US-ASCII");
-      BufferedReader br = new BufferedReader(new StringReader(
-          asciiString));
-      String line = br.readLine();
-      while (line != null && line.startsWith("@")) {
-        line = br.readLine();
-      }
-      if (line == null) {
-        return;
-      }
-      br.close();
-      String startToken = null;
-      if (line.equals("network-status-version 3")) {
-        startToken = "network-status-version 3";
-      } else if (line.startsWith("Downloaded ")
-          || line.startsWith("ExitNode ")) {
-        startToken = "ExitNode ";
-      } else {
-        System.out.println("Unknown descriptor type in file '" + file
-            + "'.  Ignoring.");
-        return;
-      }
-      String splitToken = "\n" + startToken;
-      int length = bytes.length;
-      int start = asciiString.indexOf(startToken);
-      while (start < length) {
-        int end = asciiString.indexOf(splitToken, start);
-        if (end < 0) {
-          end = length;
-        } else {
-          end += 1;
-        }
-        byte[] descBytes = new byte[end - start];
-        System.arraycopy(bytes, start, descBytes, 0, end - start);
-        if (startToken.equals("network-status-version 3")) {
-          parseConsensus(file, descBytes);
-        } else if (startToken.equals("ExitNode ")) {
-          parseExitList(file, descBytes);
-        }
-        start = end;
-      }
-    } catch (IOException e) {
-      System.out.println("Could not parse descriptor '" + file + "'.  "
-          + "Skipping.");
-    }
+    nextImportHistory.putAll(
+        descriptorReader.getExcludedFiles());
+    nextImportHistory.putAll(descriptorReader.getParsedFiles());
   }
 
   /* Date format to parse UTC timestamps. */
@@ -309,72 +234,20 @@ public class ExoneraTorDatabaseImporter {
   }
 
   /* Parse a consensus. */
-  private static void parseConsensus(File file, byte[] bytes) {
-    try {
-      BufferedReader br = new BufferedReader(new StringReader(new String(
-          bytes, "US-ASCII")));
-      String line;
-      String fingerprint = null;
-      String descriptor = null;
-      Set<String> orAddresses = new HashSet<String>();
-      long validAfterMillis = -1L;
-      StringBuilder rawStatusentryBuilder = null;
-      boolean isRunning = false;
-      while ((line = br.readLine()) != null) {
-        if (line.startsWith("vote-status ")
-            && !line.equals("vote-status consensus")) {
-          System.out.println("File '" + file + "' contains network "
-              + "status *votes*, not network status *consensuses*.  "
-              + "Skipping.");
-          return;
-        } else if (line.startsWith("valid-after ")) {
-          String validAfterTime = line.substring("valid-after ".length());
-          try {
-            validAfterMillis = parseFormat.parse(validAfterTime)
-                .getTime();
-          } catch (ParseException e) {
-            System.out.println("Could not parse valid-after timestamp in "
-                + "'" + file + "'.  Skipping.");
-            return;
-          }
-        } else if (line.startsWith("r ")
-            || line.equals("directory-footer")) {
-          if (isRunning) {
-            byte[] rawStatusentry = rawStatusentryBuilder.toString()
-                .getBytes();
-            importStatusentry(validAfterMillis, fingerprint, descriptor,
-                orAddresses, rawStatusentry);
-            orAddresses = new HashSet<String>();
-          }
-          if (line.equals("directory-footer")) {
-            return;
-          }
-          rawStatusentryBuilder = new StringBuilder(line + "\n");
-          String[] parts = line.split(" ");
-          if (parts.length < 9) {
-            System.out.println("Could not parse r line '" + line
-                + "'.  Skipping.");
-            return;
-          }
-          fingerprint = Hex.encodeHexString(Base64.decodeBase64(parts[2]
-              + "=")).toLowerCase();
-          descriptor = Hex.encodeHexString(Base64.decodeBase64(parts[3]
-              + "=")).toLowerCase();
-          orAddresses.add(parts[6]);
-        } else if (line.startsWith("a ")) {
-          rawStatusentryBuilder.append(line + "\n");
-          orAddresses.add(line.substring("a ".length(),
-              line.lastIndexOf(":")));
-        } else if (line.startsWith("s ") || line.equals("s")) {
-          rawStatusentryBuilder.append(line + "\n");
-          isRunning = line.contains(" Running");
-        } else if (rawStatusentryBuilder != null) {
-          rawStatusentryBuilder.append(line + "\n");
+  private static void parseConsensus(RelayNetworkStatusConsensus consensus) {
+    for (NetworkStatusEntry entry : consensus.getStatusEntries().values()) {
+      if (entry.getFlags().contains("Running")) {
+        Set<String> orAddresses = new HashSet<String>();
+        orAddresses.add(entry.getAddress());
+        for (String orAddressAndPort : entry.getOrAddresses()) {
+          orAddresses.add(orAddressAndPort.substring(0,
+              orAddressAndPort.lastIndexOf(":")));
         }
+        importStatusentry(consensus.getValidAfterMillis(),
+            entry.getFingerprint().toLowerCase(),
+            entry.getDescriptor().toLowerCase(),
+            orAddresses, entry.getStatusEntryBytes());
       }
-    } catch (IOException e) {
-      System.out.println("Could not parse consensus.  Skipping.");
-      return;
     }
   }
 
@@ -453,65 +326,29 @@ public class ExoneraTorDatabaseImporter {
     }
   }
 
+  private static final byte[] IGNORED_RAW_EXITLIST_ENTRY = new byte[0];
+
   /* Parse an exit list. */
-  private static void parseExitList(File file, byte[] bytes) {
-    try {
-      BufferedReader br = new BufferedReader(new StringReader(new String(
-          bytes, "US-ASCII")));
-      String fingerprint = null;
-      Set<String> exitAddressLines = new HashSet<String>();
-      StringBuilder rawExitlistentryBuilder = new StringBuilder();
-      while (true) {
-        String line = br.readLine();
-        if ((line == null || line.startsWith("ExitNode "))
-            && fingerprint != null) {
-          for (String exitAddressLine : exitAddressLines) {
-            String[] parts = exitAddressLine.split(" ");
-            String exitAddress = parts[1];
-            /* TODO Extend the following code for IPv6 once the exit list
-             * format supports it. */
-            String[] exitAddressParts = exitAddress.split("\\.");
-            byte[] exitAddress24Bytes = new byte[3];
-            exitAddress24Bytes[0] = (byte) Integer.parseInt(
-                exitAddressParts[0]);
-            exitAddress24Bytes[1] = (byte) Integer.parseInt(
-                exitAddressParts[1]);
-            exitAddress24Bytes[2] = (byte) Integer.parseInt(
-                exitAddressParts[2]);
-            String exitAddress24 = Hex.encodeHexString(
-                exitAddress24Bytes);
-            String scannedTime = parts[2] + " " + parts[3];
-            long scannedMillis = -1L;
-            try {
-              scannedMillis = parseFormat.parse(scannedTime).getTime();
-            } catch (ParseException e) {
-              System.out.println("Could not parse timestamp in "
-                  + "'" + file + "'.  Skipping.");
-              return;
-            }
-            byte[] rawExitlistentry = rawExitlistentryBuilder.toString()
-                .getBytes();
-            importExitlistentry(fingerprint, exitAddress24, exitAddress,
-                scannedMillis, rawExitlistentry);
-          }
-          exitAddressLines.clear();
-          rawExitlistentryBuilder = new StringBuilder();
-        }
-        if (line == null) {
-          break;
-        }
-        rawExitlistentryBuilder.append(line + "\n");
-        if (line.startsWith("ExitNode ")) {
-          fingerprint = line.substring("ExitNode ".length())
-              .toLowerCase();
-        } else if (line.startsWith("ExitAddress ")) {
-          exitAddressLines.add(line);
-        }
+  private static void parseExitList(ExitList exitList) {
+    for (Entry entry : exitList.getEntries()) {
+      for (Map.Entry<String, Long> e : entry.getExitAddresses().entrySet()) {
+        String exitAddress = e.getKey();
+        /* TODO Extend the following code for IPv6 once the exit list
+         * format supports it. */
+        String[] exitAddressParts = exitAddress.split("\\.");
+        byte[] exitAddress24Bytes = new byte[3];
+        exitAddress24Bytes[0] = (byte) Integer.parseInt(
+            exitAddressParts[0]);
+        exitAddress24Bytes[1] = (byte) Integer.parseInt(
+            exitAddressParts[1]);
+        exitAddress24Bytes[2] = (byte) Integer.parseInt(
+            exitAddressParts[2]);
+        String exitAddress24 = Hex.encodeHexString(
+            exitAddress24Bytes);
+        long scannedMillis = e.getValue();
+        importExitlistentry(entry.getFingerprint().toLowerCase(), exitAddress24,
+            exitAddress, scannedMillis, IGNORED_RAW_EXITLIST_ENTRY);
       }
-      br.close();
-    } catch (IOException e) {
-      System.out.println("Could not parse exit list.  Skipping.");
-      return;
     }
   }
 
