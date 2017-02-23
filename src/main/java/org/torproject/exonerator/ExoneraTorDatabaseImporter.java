@@ -161,11 +161,9 @@ public class ExoneraTorDatabaseImporter {
 
   /* Last and next parse histories containing paths of parsed files and
    * last modified times. */
-  private static SortedMap<String, Long>
-      lastImportHistory = new TreeMap<String, Long>();
+  private static SortedMap<String, Long> lastImportHistory = new TreeMap<>();
 
-  private static SortedMap<String, Long>
-      nextImportHistory = new TreeMap<String, Long>();
+  private static SortedMap<String, Long> nextImportHistory = new TreeMap<>();
 
   /* Read stats/exonerator-import-history file from disk and remember
    * locally when files were last parsed. */
@@ -237,7 +235,7 @@ public class ExoneraTorDatabaseImporter {
   private static void parseConsensus(RelayNetworkStatusConsensus consensus) {
     for (NetworkStatusEntry entry : consensus.getStatusEntries().values()) {
       if (entry.getFlags().contains("Running")) {
-        Set<String> orAddresses = new HashSet<String>();
+        Set<String> orAddresses = new HashSet<>();
         orAddresses.add(entry.getAddress());
         for (String orAddressAndPort : entry.getOrAddresses()) {
           orAddresses.add(orAddressAndPort.substring(0,

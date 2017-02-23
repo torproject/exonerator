@@ -201,7 +201,7 @@ public class ExoneraTorServlet extends HttpServlet {
      * network and tell the user about it. */
     List<String> addressesInSameNetwork = null;
     if (statusEntries.isEmpty()) {
-      addressesInSameNetwork = new ArrayList<String>();
+      addressesInSameNetwork = new ArrayList<>();
       if (!relayIp.contains(":")) {
         String address24 = this.convertIpV4ToHex(relayIp).substring(0, 6);
         if (address24 != null) {
@@ -395,7 +395,7 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private SortedSet<Long> queryKnownConsensusValidAfterTimes(
       Connection conn, String fromValidAfter, String toValidAfter) {
-    SortedSet<Long> relevantConsensuses = new TreeSet<Long>();
+    SortedSet<Long> relevantConsensuses = new TreeSet<>();
     try {
       Statement statement = conn.createStatement();
       String query = "SELECT DISTINCT validafter FROM statusentry "
@@ -419,7 +419,7 @@ public class ExoneraTorServlet extends HttpServlet {
   private List<String[]> queryStatusEntries(Connection conn,
       String relayIp, long timestamp,
       SimpleDateFormat validAfterTimeFormat) {
-    List<String[]> statusEntries = new ArrayList<String[]>();
+    List<String[]> statusEntries = new ArrayList<>();
     String addressHex = !relayIp.contains(":")
         ? this.convertIpV4ToHex(relayIp) : this.convertIpV6ToHex(relayIp);
     if (addressHex == null) {
@@ -441,8 +441,8 @@ public class ExoneraTorServlet extends HttpServlet {
       ResultSet rs = cs.executeQuery();
       while (rs.next()) {
         byte[] rawstatusentry = rs.getBytes(1);
-        SortedSet<String> addresses = new TreeSet<String>();
-        SortedSet<String> addressesHex = new TreeSet<String>();
+        SortedSet<String> addresses = new TreeSet<>();
+        SortedSet<String> addressesHex = new TreeSet<>();
         String nickname = null;
         String exit = "U";
         for (String line : new String(rawstatusentry).split("\n")) {
@@ -494,7 +494,7 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private List<String> queryAddressesInSame24(Connection conn,
       String address24, long timestamp) {
-    List<String> addressesInSameNetwork = new ArrayList<String>();
+    List<String> addressesInSameNetwork = new ArrayList<>();
     try {
       CallableStatement cs = conn.prepareCall(
           "{call search_addresses_in_same_24 (?, ?)}");
@@ -518,7 +518,7 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private List<String> queryAddressesInSame48(Connection conn,
       String address48, long timestamp) {
-    List<String> addressesInSameNetwork = new ArrayList<String>();
+    List<String> addressesInSameNetwork = new ArrayList<>();
     try {
       CallableStatement cs = conn.prepareCall(
           "{call search_addresses_in_same_48 (?, ?)}");
