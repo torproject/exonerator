@@ -834,10 +834,10 @@ public class ExoneraTorServlet extends HttpServlet {
     for (String[] tableRow : tableRows) {
       out.print("              <tr>");
       for (int i = 0; i < tableRow.length; i++) {
+        String attributes = "";
         String content = tableRow[i];
         if (i == 2) {
-          content = content.substring(0, 20) + "&#8203;"
-              + content.substring(20, 40);
+          attributes = " class=\"fingerprint\"";
         } else if (i == 3 && content == null) {
           content = "("
               + rb.getString("technicaldetails.nickname.unknown") + ")";
@@ -850,7 +850,7 @@ public class ExoneraTorServlet extends HttpServlet {
             content = rb.getString("technicaldetails.exit.no");
           }
         }
-        out.print("                <td>" + content + "</td>");
+        out.print("                <td" + attributes + ">" + content + "</td>");
       }
       out.print("              </tr>\n");
     }

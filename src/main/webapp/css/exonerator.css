@@ -25,6 +25,11 @@ body {
   margin-bottom: 15px;
 }
 
+.fingerprint {
+  word-break: break-all;
+  word-wrap: break-word;
+}
+
 pre {
   white-space: pre-wrap;
 }
