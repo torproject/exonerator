@@ -16,12 +16,16 @@ import java.sql.Statement;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.ResourceBundle;
+import java.util.SortedMap;
 import java.util.SortedSet;
 import java.util.TimeZone;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -44,6 +48,11 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private Logger logger;
 
+  private List<String> availableLanguages =
+      Arrays.asList("de", "en", "fr", "ro", "sv");
+
+  private SortedMap<String, String> availableLanguageNames;
+
   @Override
   public void init() {
 
@@ -58,6 +67,14 @@ public class ExoneraTorServlet extends HttpServlet {
     } catch (NamingException e) {
       this.logger.log(Level.WARNING, "Could not look up data source", e);
     }
+
+    this.availableLanguageNames = new TreeMap<>();
+    for (String locale : this.availableLanguages) {
+      ResourceBundle rb = ResourceBundle.getBundle("ExoneraTor",
+          Locale.forLanguageTag(locale));
+      this.availableLanguageNames.put(locale, rb.getString(
+          "footer.language.name"));
+    }
   }
 
   @Override
@@ -69,13 +86,19 @@ public class ExoneraTorServlet extends HttpServlet {
     response.setContentType("text/html");
     response.setCharacterEncoding("utf-8");
 
-    /* Find the right resource bundle for the user's locale. */
-    Locale locale = request.getLocale();
-    ResourceBundle rb = ResourceBundle.getBundle("ExoneraTor", locale);
+    /* Find the right resource bundle for the user's requested language. */
+    String langParameter = request.getParameter("lang");
+    String langStr = "en";
+    if (null != langParameter
+        && this.availableLanguages.contains(langParameter)) {
+      langStr = langParameter;
+    }
+    ResourceBundle rb = ResourceBundle.getBundle("ExoneraTor",
+        Locale.forLanguageTag(langStr));
 
     /* Start writing response. */
     PrintWriter out = response.getWriter();
-    this.writeHeader(out, rb);
+    this.writeHeader(out, rb, langStr);
 
     /* Open a database connection that we'll use to handle the whole
      * request. */
@@ -83,7 +106,7 @@ public class ExoneraTorServlet extends HttpServlet {
     Connection conn = this.connectToDatabase();
     if (conn == null) {
       this.writeSummaryUnableToConnectToDatabase(out, rb);
-      this.writeFooter(out, rb);
+      this.writeFooter(out, rb, null, null);
       return;
     }
 
@@ -92,7 +115,7 @@ public class ExoneraTorServlet extends HttpServlet {
         conn);
     if (firstAndLastDates == null) {
       this.writeSummaryNoData(out, rb);
-      this.writeFooter(out, rb);
+      this.writeFooter(out, rb, null, null);
       this.closeDatabaseConnection(conn, requestedConnection);
     }
     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
@@ -132,12 +155,12 @@ public class ExoneraTorServlet extends HttpServlet {
         !relayIpHasError
         && !("".equals(relayIp) && !"".equals(timestampStr))
         && (timestampHasError || timestampOutOfRange
-        || (!"".equals(relayIp) && "".equals(timestampStr))));
+        || (!"".equals(relayIp) && "".equals(timestampStr))), langStr);
 
     /* If both parameters are empty, don't print any summary and exit.
      * This is the start page. */
     if ("".equals(relayIp) && "".equals(timestampStr)) {
-      this.writeFooter(out, rb);
+      this.writeFooter(out, rb, null, null);
       this.closeDatabaseConnection(conn, requestedConnection);
       return;
     }
@@ -150,7 +173,7 @@ public class ExoneraTorServlet extends HttpServlet {
       } else {
         writeSummaryNoTimestamp(out, rb);
       }
-      this.writeFooter(out, rb);
+      this.writeFooter(out, rb, null, null);
       this.closeDatabaseConnection(conn, requestedConnection);
       return;
     }
@@ -166,7 +189,7 @@ public class ExoneraTorServlet extends HttpServlet {
         this.writeSummaryTimestampOutsideRange(out, rb, timestampStr,
             firstDate, lastDate);
       }
-      this.writeFooter(out, rb);
+      this.writeFooter(out, rb, relayIp, timestampStr);
       this.closeDatabaseConnection(conn, requestedConnection);
       return;
     }
@@ -185,7 +208,7 @@ public class ExoneraTorServlet extends HttpServlet {
         toValidAfter);
     if (relevantConsensuses == null || relevantConsensuses.isEmpty()) {
       this.writeSummaryNoDataForThisInterval(out, rb);
-      this.writeFooter(out, rb);
+      this.writeFooter(out, rb, relayIp, timestampStr);
       this.closeDatabaseConnection(conn, requestedConnection);
       return;
     }
@@ -226,15 +249,15 @@ public class ExoneraTorServlet extends HttpServlet {
     } else if (addressesInSameNetwork != null
         && !addressesInSameNetwork.isEmpty()) {
       this.writeSummaryAddressesInSameNetwork(out, rb, relayIp,
-          timestampStr, addressesInSameNetwork);
+          timestampStr, langStr, addressesInSameNetwork);
     } else {
       this.writeSummaryNegative(out, rb, relayIp, timestampStr);
     }
 
-    this.writePermanentLink(out, rb, relayIp, timestampStr);
+    this.writePermanentLink(out, rb, relayIp, timestampStr, langStr);
 
     this.closeDatabaseConnection(conn, requestedConnection);
-    this.writeFooter(out, rb);
+    this.writeFooter(out, rb, relayIp, timestampStr);
   }
 
   /* Helper methods for handling the request. */
@@ -555,7 +578,7 @@ public class ExoneraTorServlet extends HttpServlet {
 
   /* Helper methods for writing the response. */
 
-  private void writeHeader(PrintWriter out, ResourceBundle rb)
+  private void writeHeader(PrintWriter out, ResourceBundle rb, String langStr)
       throws IOException {
     out.printf("<!DOCTYPE html>\n"
         + "<html lang=\"%s\">\n"
@@ -578,7 +601,7 @@ public class ExoneraTorServlet extends HttpServlet {
         + "          <div class=\"page-header\">\n"
         + "            <h1>\n"
         + "              <div class=\"text-center\">\n"
-        + "                <a href=\"/\">"
+        + "                <a href=\"/?lang=%<s\">"
           + "<img src=\"images/exonerator-logo.png\" "
           + "width=\"334\" height=\"252\" alt=\"ExoneraTor logo\">"
           + "<img src=\"images/exonerator-wordmark.png\" width=\"428\" "
@@ -588,12 +611,12 @@ public class ExoneraTorServlet extends HttpServlet {
         + "          </div><!-- page-header -->\n"
         + "        </div><!-- col -->\n"
         + "      </div><!-- row -->\n",
-        rb.getLocale().getLanguage());
+        langStr);
   }
 
   private void writeForm(PrintWriter out, ResourceBundle rb,
       String relayIp, boolean relayIpHasError, String timestampStr,
-      boolean timestampHasError) throws IOException {
+      boolean timestampHasError, String langStr) throws IOException {
     String ipValue = "";
     if (relayIp != null && relayIp.length() > 0) {
       if (relayIp.contains(":")) {
@@ -623,6 +646,7 @@ public class ExoneraTorServlet extends HttpServlet {
           + "name=\"timestamp\" id=\"inputTimestamp\" "
           + "placeholder=\"2010-01-01\"%s required>\n"
         + "              </div><!-- form-group -->\n"
+        + "              <input type=\"hidden\" name=\"lang\" value=\"%s\">\n"
         + "              <button type=\"submit\" "
           + "class=\"btn btn-primary\">%s</button>\n"
         + "            </form>\n"
@@ -637,6 +661,7 @@ public class ExoneraTorServlet extends HttpServlet {
         rb.getString("form.timestamp.label"),
         timestampStr != null && timestampStr.length() > 0
             ? " value=\"" + timestampStr + "\"" : "",
+        langStr,
         rb.getString("form.search.label"));
   }
 
@@ -730,7 +755,7 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writeSummaryAddressesInSameNetwork(PrintWriter out,
-      ResourceBundle rb, String relayIp, String timestampStr,
+      ResourceBundle rb, String relayIp, String timestampStr, String langStr,
       List<String> addressesInSameNetwork) throws IOException {
     Object[][] panelItems = new Object[addressesInSameNetwork.size()][];
     for (int i = 0; i < addressesInSameNetwork.size(); i++) {
@@ -738,12 +763,13 @@ public class ExoneraTorServlet extends HttpServlet {
       String link;
       String address;
       if (addressInSameNetwork.contains(":")) {
-        link = String.format("/?ip=[%s]&timestamp=%s",
-            addressInSameNetwork.replaceAll(":", "%3A"), timestampStr);
+        link = String.format("/?ip=[%s]&timestamp=%s&lang=%s",
+            addressInSameNetwork.replaceAll(":", "%3A"), timestampStr,
+            langStr);
         address = "[" + addressInSameNetwork + "]";
       } else {
-        link = String.format("/?ip=%s&timestamp=%s",
-            addressInSameNetwork, timestampStr);
+        link = String.format("/?ip=%s&timestamp=%s&lang=%s",
+            addressInSameNetwork, timestampStr, langStr);
         address = addressInSameNetwork;
       }
       panelItems[i] = new Object[] { link, address };
@@ -861,22 +887,22 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writePermanentLink(PrintWriter out, ResourceBundle rb,
-      String relayIp, String timestampStr) throws IOException {
+      String relayIp, String timestampStr, String langStr) throws IOException {
     String encodedAddress = relayIp.contains(":")
         ? "[" + relayIp.replaceAll(":", "%3A") + "]" : relayIp;
     out.printf("      <div class=\"row\">\n"
         + "        <div class=\"col-xs-12\">\n"
         + "          <h2>%s</h2>\n"
         + "          <pre>https://exonerator.torproject.org/?ip=%s&amp;"
-          + "timestamp=%s</pre>\n"
+          + "timestamp=%s&amp;lang=%s</pre>\n"
         + "        </div><!-- col -->\n"
         + "      </div><!-- row -->\n",
         rb.getString("permanentlink.heading"),
-        encodedAddress, timestampStr);
+        encodedAddress, timestampStr, langStr);
   }
 
-  private void writeFooter(PrintWriter out, ResourceBundle rb)
-      throws IOException {
+  private void writeFooter(PrintWriter out, ResourceBundle rb, String relayIp,
+      String timestampStr) throws IOException {
     out.printf("    </div><!-- container -->\n"
         + "    <div class=\"footer\">\n"
         + "      <div class=\"container\">\n"
@@ -898,11 +924,28 @@ public class ExoneraTorServlet extends HttpServlet {
         + "            <h3>%s</h3>\n"
         + "            <p class=\"small\">%s</p>\n"
         + "          </div><!-- col -->\n"
-        + "        </div><!-- row -->\n"
-        + "        <div class=\"row\">\n",
+        + "        </div><!-- row -->\n",
         rb.getString("footer.aboutexonerator.heading"),
         rb.getString("footer.aboutexonerator.body"));
-    out.printf("          <div class=\"col-xs-12\">\n"
+    out.printf("        <div class=\"row\">\n"
+        + "          <div class=\"col-xs-12\">\n"
+        + "            <p class=\"text-center small\">%s",
+        rb.getString("footer.language.text"));
+    for (Map.Entry<String, String> entry
+        : this.availableLanguageNames.entrySet()) {
+      if (null != relayIp && null != timestampStr) {
+        out.printf(" <a href=\"/?ip=%s&timestamp=%s&lang=%s\">%s</a>",
+            relayIp, timestampStr, entry.getKey(), entry.getValue());
+      } else {
+        out.printf(" <a href=\"/?lang=%s\">%s</a>",
+            entry.getKey(), entry.getValue());
+      }
+    }
+    out.printf("</p>\n"
+        + "          </div><!-- col -->\n"
+        + "        </div><!-- row -->\n"
+        + "        <div class=\"row\">\n"
+        + "          <div class=\"col-xs-12\">\n"
         + "            <p class=\"text-center small\">%s</p>\n"
         + "          </div><!-- col -->\n"
         + "        </div><!-- row -->\n"
