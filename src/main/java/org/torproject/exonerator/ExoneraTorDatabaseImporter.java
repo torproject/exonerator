@@ -5,7 +5,6 @@ package org.torproject.exonerator;
 
 import org.torproject.descriptor.Descriptor;
 import org.torproject.descriptor.DescriptorCollector;
-import org.torproject.descriptor.DescriptorFile;
 import org.torproject.descriptor.DescriptorReader;
 import org.torproject.descriptor.DescriptorSourceFactory;
 import org.torproject.descriptor.ExitList;
@@ -203,19 +202,16 @@ public class ExoneraTorDatabaseImporter {
   private static void parseDescriptors() {
     DescriptorReader descriptorReader =
         DescriptorSourceFactory.createDescriptorReader();
-    descriptorReader.addDirectory(new File(importDirString));
-    descriptorReader.setMaxDescriptorFilesInQueue(20);
+    descriptorReader.setMaxDescriptorsInQueue(20);
     descriptorReader.setExcludedFiles(lastImportHistory);
-    Iterator<DescriptorFile> descriptorFiles =
-        descriptorReader.readDescriptors();
-    while (descriptorFiles.hasNext()) {
-      DescriptorFile descriptorFile = descriptorFiles.next();
-      for (Descriptor descriptor : descriptorFile.getDescriptors()) {
-        if (descriptor instanceof RelayNetworkStatusConsensus) {
-          parseConsensus((RelayNetworkStatusConsensus) descriptor);
-        } else if (descriptor instanceof ExitList) {
-          parseExitList((ExitList) descriptor);
-        }
+    Iterator<Descriptor> descriptors = descriptorReader.readDescriptors(
+        new File(importDirString)).iterator();
+    while (descriptors.hasNext()) {
+      Descriptor descriptor = descriptors.next();
+      if (descriptor instanceof RelayNetworkStatusConsensus) {
+        parseConsensus((RelayNetworkStatusConsensus) descriptor);
+      } else if (descriptor instanceof ExitList) {
+        parseExitList((ExitList) descriptor);
       }
     }
     nextImportHistory.putAll(
