@@ -12,7 +12,7 @@
   <property name="webxmlfile" value="src/main/webapp/web.xml"/>
   <property name="warfile" value="${dist}/exonerator.war"/>
   <property name="source-and-target-java-version" value="1.7" />
-  <property name="descriptorversion" value="1.8.0" />
+  <property name="descriptorversion" value="1.8.2" />
   <path id="classpath">
     <pathelement path="${classes}"/>
     <fileset dir="${libs}">
