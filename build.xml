@@ -12,11 +12,11 @@
   <property name="webxmlfile" value="src/main/webapp/web.xml"/>
   <property name="warfile" value="${dist}/exonerator.war"/>
   <property name="source-and-target-java-version" value="1.7" />
-  <property name="descriptorversion" value="1.9.0" />
+  <property name="metricslibversion" value="2.0.0" />
   <path id="classpath">
     <pathelement path="${classes}"/>
     <fileset dir="${libs}">
-      <include name="descriptor-${descriptorversion}.jar"/>
+      <include name="metrics-lib-${metricslibversion}.jar"/>
       <include name="commons-compress-1.9.jar"/>
       <include name="commons-codec-1.9.jar"/>
       <include name="commons-lang-2.6.jar"/>
