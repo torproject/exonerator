@@ -11,7 +11,6 @@ import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -231,141 +230,7 @@ public class QueryServlet extends HttpServlet {
 
   private QueryResponse queryDatabase(String relayIp, long timestamp) {
 
-    QueryResponse response = null;
-    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-    dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-    SimpleDateFormat validAfterTimeFormat = new SimpleDateFormat(
-        "yyyy-MM-dd HH:mm:ss");
-    validAfterTimeFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-
-    /* Open a database connection that we'll use to handle the whole
-     * request. */
-    long requestedConnection = System.currentTimeMillis();
-    Connection conn = this.connectToDatabase();
-    if (null != conn) {
-
-      response = new QueryResponse();
-      response.queryAddress = relayIp;
-      response.queryDate = dateFormat.format(timestamp);
-
-      /* Look up first and last date in the database. */
-      long[] firstAndLastDates = this.queryFirstAndLastDatesFromDatabase(
-          conn);
-      if (null != firstAndLastDates) {
-        response.firstDateInDatabase = dateFormat.format(
-            firstAndLastDates[0]);
-        response.lastDateInDatabase = dateFormat.format(firstAndLastDates[1]);
-
-        /* Consider all consensuses published on or within a day of the given
-         * date. */
-        long timestampFrom = timestamp - 24L * 60L * 60L * 1000L;
-        long timestampTo = timestamp + 2 * 24L * 60L * 60L * 1000L - 1L;
-        String fromValidAfter = validAfterTimeFormat.format(timestampFrom);
-        String toValidAfter = validAfterTimeFormat.format(timestampTo);
-        SortedSet<Long> relevantConsensuses =
-            this.queryKnownConsensusValidAfterTimes(conn, fromValidAfter,
-                toValidAfter);
-        if (null != relevantConsensuses && !relevantConsensuses.isEmpty()) {
-          response.relevantStatuses = true;
-
-          /* Search for status entries with the given IP address as onion
-           * routing address, plus status entries of relays having an exit
-           * list entry with the given IP address as exit address. */
-          List<QueryResponse.Match> matches = this.queryStatusEntries(conn,
-              relayIp, timestamp, validAfterTimeFormat);
-          if (!matches.isEmpty()) {
-            response.matches = matches.toArray(new QueryResponse.Match[0]);
-
-          /* If we didn't find anything, run another query to find out if
-           * there are relays running on other IP addresses in the same /24 or
-           * /48 network and tell the user about it. */
-          } else {
-            if (!relayIp.contains(":")) {
-              String address24 = this.convertIpV4ToHex(relayIp)
-                  .substring(0, 6);
-              if (address24 != null) {
-                response.nearbyAddresses = this.queryAddressesInSame24(conn,
-                    address24, timestamp).toArray(new String[0]);
-              }
-            } else {
-              String address48 = this.convertIpV6ToHex(relayIp)
-                  .substring(0, 12);
-              if (address48 != null) {
-                response.nearbyAddresses = this.queryAddressesInSame48(conn,
-                    address48, timestamp).toArray(new String[0]);
-              }
-            }
-          }
-        }
-      }
-
-      /* Close the database connection. */
-      this.closeDatabaseConnection(conn, requestedConnection);
-    }
-    return response;
-  }
-
-  private Connection connectToDatabase() {
-    Connection conn = null;
-    try {
-      conn = this.ds.getConnection();
-    } catch (SQLException e) {
-      this.logger.log(Level.WARNING, "Couldn't connect: " + e.getMessage(), e);
-    }
-    return conn;
-  }
-
-  private long[] queryFirstAndLastDatesFromDatabase(Connection conn) {
-    long[] firstAndLastDates = null;
-    try {
-      Statement statement = conn.createStatement();
-      String query = "SELECT DATE(MIN(validafter)) AS first, "
-          + "DATE(MAX(validafter)) AS last FROM statusentry";
-      ResultSet rs = statement.executeQuery(query);
-      if (rs.next()) {
-        Calendar utcCalendar = Calendar.getInstance(
-            TimeZone.getTimeZone("UTC"));
-        firstAndLastDates = new long[] {
-            rs.getTimestamp(1, utcCalendar).getTime(),
-            rs.getTimestamp(2, utcCalendar).getTime()
-        };
-      }
-      rs.close();
-      statement.close();
-    } catch (SQLException e) {
-      /* Looks like we don't have any consensuses. */
-      firstAndLastDates = null;
-    }
-    return firstAndLastDates;
-  }
-
-  private SortedSet<Long> queryKnownConsensusValidAfterTimes(
-      Connection conn, String fromValidAfter, String toValidAfter) {
-    SortedSet<Long> relevantConsensuses = new TreeSet<>();
-    try {
-      Statement statement = conn.createStatement();
-      String query = "SELECT DISTINCT validafter FROM statusentry "
-          + "WHERE validafter >= '" + fromValidAfter
-          + "' AND validafter <= '" + toValidAfter + "'";
-      ResultSet rs = statement.executeQuery(query);
-      while (rs.next()) {
-        long consensusTime = rs.getTimestamp(1).getTime();
-        relevantConsensuses.add(consensusTime);
-      }
-      rs.close();
-      statement.close();
-    } catch (SQLException e) {
-      /* Looks like we don't have any consensuses in the requested
-       * interval. */
-      relevantConsensuses = null;
-    }
-    return relevantConsensuses;
-  }
-
-  private List<QueryResponse.Match> queryStatusEntries(Connection conn,
-      String relayIp, long timestamp,
-      SimpleDateFormat validAfterTimeFormat) {
-    List<QueryResponse.Match> matches = new ArrayList<>();
+    /* Convert address to hex. */
     String addressHex = !relayIp.contains(":")
         ? this.convertIpV4ToHex(relayIp) : this.convertIpV6ToHex(relayIp);
     if (addressHex == null) {
@@ -373,20 +238,36 @@ public class QueryServlet extends HttpServlet {
     }
     String address24Or48Hex = !relayIp.contains(":")
         ? addressHex.substring(0, 6) : addressHex.substring(0, 12);
+
+    /* Prepare formatting response items. */
+    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+    dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+    SimpleDateFormat validAfterTimeFormat = new SimpleDateFormat(
+        "yyyy-MM-dd HH:mm:ss");
+    validAfterTimeFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+
+    /* Make the database query. */
+    SortedSet<Long> allValidAfters = new TreeSet<>();
+    List<QueryResponse.Match> matches = new ArrayList<>();
+    SortedSet<String> allAddresses = new TreeSet<>();
     try {
-      CallableStatement cs;
-      if (!relayIp.contains(":")) {
-        cs = conn.prepareCall("{call search_by_address24_date(?, ?)}");
-      } else {
-        cs = conn.prepareCall("{call search_by_address48_date(?, ?)}");
-      }
+      final long requestedConnection = System.currentTimeMillis();
+      Connection conn = this.ds.getConnection();
+      CallableStatement cs = conn.prepareCall(String.format(
+          "{call search_by_address%s_date(?, ?)}",
+          relayIp.contains(":") ? 48 : 24));
       cs.setString(1, address24Or48Hex);
       Calendar utcCalendar = Calendar.getInstance(
           TimeZone.getTimeZone("UTC"));
       cs.setDate(2, new java.sql.Date(timestamp), utcCalendar);
       ResultSet rs = cs.executeQuery();
       while (rs.next()) {
+        long validafter = rs.getTimestamp(2, utcCalendar).getTime();
+        allValidAfters.add(validafter);
         byte[] rawstatusentry = rs.getBytes(1);
+        if (null == rawstatusentry) {
+          continue;
+        }
         SortedSet<String> addresses = new TreeSet<>();
         SortedSet<String> addressesHex = new TreeSet<>();
         String nickname = null;
@@ -414,10 +295,10 @@ public class QueryServlet extends HttpServlet {
           addresses.add(exitaddress);
           addressesHex.add(this.convertIpV4ToHex(exitaddress));
         }
+        allAddresses.addAll(addresses);
         if (!addressesHex.contains(addressHex)) {
           continue;
         }
-        long validafter = rs.getTimestamp(2, utcCalendar).getTime();
         String validAfterString = validAfterTimeFormat.format(validafter);
         String fingerprint = rs.getString(3).toUpperCase();
         QueryResponse.Match match = new QueryResponse.Match();
@@ -430,73 +311,55 @@ public class QueryServlet extends HttpServlet {
       }
       rs.close();
       cs.close();
-    } catch (SQLException e) {
-      /* Nothing found. */
-      matches.clear();
-    }
-    return matches;
-  }
-
-  private List<String> queryAddressesInSame24(Connection conn,
-      String address24, long timestamp) {
-    List<String> addressesInSameNetwork = new ArrayList<>();
-    try {
-      CallableStatement cs = conn.prepareCall(
-          "{call search_addresses_in_same_24 (?, ?)}");
-      cs.setString(1, address24);
-      cs.setDate(2, new java.sql.Date(timestamp));
-      ResultSet rs = cs.executeQuery();
-      while (rs.next()) {
-        String address = rs.getString(1);
-        if (!addressesInSameNetwork.contains(address)) {
-          addressesInSameNetwork.add(address);
-        }
-      }
-      rs.close();
-      cs.close();
-    } catch (SQLException e) {
-      /* No other addresses in the same /24 found. */
-      addressesInSameNetwork = null;
-    }
-    return addressesInSameNetwork;
-  }
-
-  private List<String> queryAddressesInSame48(Connection conn,
-      String address48, long timestamp) {
-    List<String> addressesInSameNetwork = new ArrayList<>();
-    try {
-      CallableStatement cs = conn.prepareCall(
-          "{call search_addresses_in_same_48 (?, ?)}");
-      cs.setString(1, address48);
-      cs.setDate(2, new java.sql.Date(timestamp));
-      ResultSet rs = cs.executeQuery();
-      while (rs.next()) {
-        String address = rs.getString(1);
-        if (!addressesInSameNetwork.contains(address)) {
-          addressesInSameNetwork.add(address);
-        }
-      }
-      rs.close();
-      cs.close();
-    } catch (SQLException e) {
-      /* No other addresses in the same /48 found. */
-      addressesInSameNetwork = null;
-    }
-    return addressesInSameNetwork;
-  }
-
-  private void closeDatabaseConnection(Connection conn,
-      long requestedConnection) {
-    try {
       conn.close();
       this.logger.info("Returned a database connection to the pool "
           + "after " + (System.currentTimeMillis()
           - requestedConnection) + " millis.");
     } catch (SQLException e) {
-      this.logger.log(Level.WARNING, "Couldn't close: " + e.getMessage(), e);
+      /* Nothing found. */
+      this.logger.log(Level.WARNING, "Database error: " + e.getMessage(), e);
+      return null;
     }
-    return;
-  }
 
+    /* Create a query response object. */
+    QueryResponse response = new QueryResponse();
+    response.queryAddress = relayIp;
+    response.queryDate = dateFormat.format(timestamp);
+    if (!allValidAfters.isEmpty()) {
+      response.firstDateInDatabase = dateFormat.format(allValidAfters.first());
+      response.lastDateInDatabase = dateFormat.format(allValidAfters.last());
+      response.relevantStatuses = false;
+      long timestampFrom = timestamp - 24L * 60L * 60L * 1000L;
+      long timestampTo = timestamp + 2 * 24L * 60L * 60L * 1000L - 1L;
+      for (long validAfter : allValidAfters) {
+        if (validAfter >= timestampFrom && validAfter <= timestampTo) {
+          response.relevantStatuses = true;
+          break;
+        }
+      }
+      if (!matches.isEmpty()) {
+        response.matches = matches.toArray(new QueryResponse.Match[0]);
+      } else {
+        List<String> nearbyAddresses = new ArrayList<>();
+        for (String nearbyAddress : allAddresses) {
+          String nearbyAddressHex = !nearbyAddress.contains(":")
+              ? this.convertIpV4ToHex(nearbyAddress)
+              : this.convertIpV6ToHex(nearbyAddress);
+          String nearbyAddress24Or48Hex = !nearbyAddress.contains(":")
+              ? nearbyAddressHex.substring(0, 6)
+              : nearbyAddressHex.substring(0, 12);
+          if (address24Or48Hex.equals(nearbyAddress24Or48Hex)) {
+            nearbyAddresses.add(nearbyAddress);
+          }
+        }
+        if (!nearbyAddresses.isEmpty()) {
+          response.nearbyAddresses = nearbyAddresses.toArray(new String[0]);
+        }
+      }
+    }
+
+    /* Return the query response. */
+    return response;
+  }
 }
 

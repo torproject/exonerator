@@ -200,19 +200,36 @@ CREATE OR REPLACE FUNCTION search_by_address24_date (
           exitaddress TEXT) AS $$
   BEGIN
   RETURN QUERY EXECUTE
-  -- The first select finds all status entries of relays with the given
+  -- The first and second selects retrieve the first and last valid-after
+  -- time in the database.
+  --
+  -- The third select retrieves known valid-after times from 1 day before
+  -- to 1 day after the given date.
+  --
+  -- The fourth select finds all status entries of relays with the given
   -- IP address as onion routing address.
   --
-  -- The second select finds status entries of relays having an exit list
+  -- The fifth select finds status entries of relays having an exit list
   -- entry with the provided IP address as the exit address.
-  -- In the second select,
+  -- In the fifth select,
   --  - Focus on a time period from 1 day before and 1 day after the
   -- given date.  Also include a second day before the given date
   -- for exit lists, because it can take up to 24 hours to scan a
   -- relay again.  We should not miss exit list entries here.
   --  - Consider only exit list scans that took place in the 24 hours
   -- before the relay was listed in a consensus.
-  'SELECT rawstatusentry,
+  'SELECT NULL::BYTEA, MIN(validafter), NULL::CHARACTER, NULL::TEXT
+      FROM statusentry
+  UNION
+  SELECT NULL::BYTEA, MAX(validafter), NULL::CHARACTER, NULL::TEXT
+      FROM statusentry
+  UNION
+  SELECT DISTINCT NULL::BYTEA, validafter, NULL::CHARACTER, NULL::TEXT
+      FROM statusentry
+      WHERE DATE(validafter) >= ''' || select_date || '''::DATE - 1
+      AND DATE(validafter) <= ''' || select_date || '''::DATE + 1
+  UNION
+  SELECT rawstatusentry,
         validafter,
         fingerprint,
         NULL
@@ -256,7 +273,18 @@ CREATE OR REPLACE FUNCTION search_by_address48_date (
           exitaddress TEXT) AS $$
   BEGIN
   RETURN QUERY EXECUTE
-  'SELECT rawstatusentry,
+  'SELECT NULL::BYTEA, MIN(validafter), NULL::CHARACTER, NULL::TEXT
+      FROM statusentry
+  UNION
+  SELECT NULL::BYTEA, MAX(validafter), NULL::CHARACTER, NULL::TEXT
+      FROM statusentry
+  UNION
+  SELECT DISTINCT NULL::BYTEA, validafter, NULL::CHARACTER, NULL::TEXT
+      FROM statusentry
+      WHERE DATE(validafter) >= ''' || select_date || '''::DATE - 1
+      AND DATE(validafter) <= ''' || select_date || '''::DATE + 1
+  UNION
+  SELECT rawstatusentry,
         validafter,
         fingerprint,
         NULL::TEXT
@@ -267,43 +295,4 @@ CREATE OR REPLACE FUNCTION search_by_address48_date (
   ORDER BY 2, 3';
   END;
 $$ LANGUAGE plpgsql;
-
--- Look up all IPv4 OR and exit addresses in the /24 network of a given
--- address to suggest other addresses the user may be looking for.
-CREATE OR REPLACE FUNCTION search_addresses_in_same_24 (
-    select_address24 CHARACTER(6),
-    select_date DATE)
-    RETURNS TABLE(addresstext TEXT,
-          addressinet INET) AS $$
-  SELECT HOST(oraddress),
-        oraddress
-      FROM statusentry
-      WHERE oraddress24 = $1
-      AND DATE(validafter) >= $2 - 1
-      AND DATE(validafter) <= $2 + 1
-  UNION
-  SELECT HOST(exitaddress),
-        exitaddress
-      FROM exitlistentry
-      WHERE exitaddress24 = $1
-      AND DATE(scanned) >= $2 - 2
-      AND DATE(scanned) <= $2 + 1
-  ORDER BY 2;
-$$ LANGUAGE SQL;
-
--- Look up all IPv6 OR addresses in the /48 network of a given address to
--- suggest other addresses the user may be looking for.
-CREATE OR REPLACE FUNCTION search_addresses_in_same_48 (
-    select_address48 CHARACTER(12),
-    select_date DATE)
-    RETURNS TABLE(addresstext TEXT,
-          addressinet INET) AS $$
-  SELECT HOST(oraddress),
-        oraddress
-      FROM statusentry
-      WHERE oraddress48 = $1
-      AND DATE(validafter) >= $2 - 1
-      AND DATE(validafter) <= $2 + 1
-  ORDER BY 2;
-$$ LANGUAGE SQL;
 
