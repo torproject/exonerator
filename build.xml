@@ -108,6 +108,7 @@
       <lib dir="${libs}">
         <include name="commons-codec-1.10.jar"/>
         <include name="commons-lang-2.6.jar"/>
+        <include name="gson-2.4.jar" />
         <include name="postgresql-9.4.1212.jar"/>
       </lib>
       <classes dir="${classes}"/>

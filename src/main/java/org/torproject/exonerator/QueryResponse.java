@@ -8,6 +8,9 @@ import com.google.gson.annotations.SerializedName;
 /** Query response from the ExoneraTor database. */
 public class QueryResponse {
 
+  /** Version of this response format. */
+  String version = "1.0";
+
   /** Query IP address passed in the request; never <code>null</code>. */
   @SerializedName("query_address")
   String queryAddress;

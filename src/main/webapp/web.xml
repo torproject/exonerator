@@ -17,6 +17,17 @@
     <url-pattern>/index.html</url-pattern>
   </servlet-mapping>
 
+  <servlet>
+    <servlet-name>Query</servlet-name>
+    <servlet-class>
+      org.torproject.exonerator.QueryServlet
+    </servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>Query</servlet-name>
+    <url-pattern>/query.json</url-pattern>
+  </servlet-mapping>
+
   <welcome-file-list>
     <welcome-file>index.html</welcome-file>
   </welcome-file-list>
