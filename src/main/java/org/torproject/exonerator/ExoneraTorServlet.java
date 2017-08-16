@@ -105,89 +105,41 @@ public class ExoneraTorServlet extends HttpServlet {
 
     /* Step 2: Query the database. */
 
-    /* Query the following data. */
     boolean successfullyConnectedToDatabase = false;
     String firstDate = null;
     String lastDate = null;
     boolean noRelevantConsensuses = true;
-    List<String[]> statusEntries = null;
+    List<String[]> statusEntries = new ArrayList<>();
     List<String> addressesInSameNetwork = null;
 
     /* Only query the database if we received valid user input. */
     if (null != relayIp && !relayIp.isEmpty() && null != timestampStr
         && !timestampStr.isEmpty()) {
-
-      /* Open a database connection that we'll use to handle the whole
-       * request. */
-      long requestedConnection = System.currentTimeMillis();
-      Connection conn = this.connectToDatabase();
-      if (null != conn) {
+      QueryResponse queryResponse = this.queryDatabase(relayIp, timestampStr);
+      if (null != queryResponse) {
         successfullyConnectedToDatabase = true;
-
-        /* Look up first and last date in the database. */
-        long[] firstAndLastDates = this.queryFirstAndLastDatesFromDatabase(
-            conn);
-        if (null != firstAndLastDates) {
-          SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-          dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-          firstDate = dateFormat.format(firstAndLastDates[0]);
-          lastDate = dateFormat.format(firstAndLastDates[1]);
-
-          /* Consider all consensuses published on or within a day of the given
-           * date. */
-          long timestamp = 0L;
-          if (timestampStr != null && timestampStr.length() > 0) {
-            try {
-              timestamp = dateFormat.parse(timestampParameter).getTime();
-            } catch (ParseException e) {
-              /* Already checked in parseTimestamp(). */
+        firstDate = queryResponse.firstDateInDatabase;
+        lastDate = queryResponse.lastDateInDatabase;
+        if (null != queryResponse.relevantStatuses
+            && queryResponse.relevantStatuses) {
+          noRelevantConsensuses = false;
+        }
+        if (null != queryResponse.matches) {
+          for (QueryResponse.Match match : queryResponse.matches) {
+            StringBuilder sb = new StringBuilder();
+            int writtenAddresses = 0;
+            for (String address : match.addresses) {
+              sb.append((writtenAddresses++ > 0 ? ", " : "") + address);
             }
-          }
-          long timestampFrom = timestamp - 24L * 60L * 60L * 1000L;
-          long timestampTo = timestamp + 2 * 24L * 60L * 60L * 1000L - 1L;
-          SimpleDateFormat validAfterTimeFormat = new SimpleDateFormat(
-              "yyyy-MM-dd HH:mm:ss");
-          validAfterTimeFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-          String fromValidAfter = validAfterTimeFormat.format(timestampFrom);
-          String toValidAfter = validAfterTimeFormat.format(timestampTo);
-          SortedSet<Long> relevantConsensuses
-              = this.queryKnownConsensusValidAfterTimes(conn,
-              fromValidAfter, toValidAfter);
-          if (null != relevantConsensuses && !relevantConsensuses.isEmpty()) {
-            noRelevantConsensuses = false;
-
-            /* Search for status entries with the given IP address as onion
-             * routing address, plus status entries of relays having an exit
-             * list entry with the given IP address as exit address. */
-            statusEntries = this.queryStatusEntries(conn, relayIp,
-                timestamp, validAfterTimeFormat);
-
-            /* If we didn't find anything, run another query to find out if
-             * there are relays running on other IP addresses in the same /24 or
-             * /48 network and tell the user about it. */
-            if (statusEntries.isEmpty()) {
-              addressesInSameNetwork = new ArrayList<>();
-              if (!relayIp.contains(":")) {
-                String address24 = this.convertIpV4ToHex(relayIp)
-                    .substring(0, 6);
-                if (address24 != null) {
-                  addressesInSameNetwork = this.queryAddressesInSame24(conn,
-                      address24, timestamp);
-                }
-              } else {
-                String address48 = this.convertIpV6ToHex(relayIp)
-                    .substring(0, 12);
-                if (address48 != null) {
-                  addressesInSameNetwork = this.queryAddressesInSame48(conn,
-                      address48, timestamp);
-                }
-              }
-            }
+            String[] statusEntry = new String[]{match.timestamp,
+                sb.toString(), match.fingerprint, match.nickname,
+                null == match.exit ? "U" : (match.exit ? "Y" : "N")};
+            statusEntries.add(statusEntry);
           }
         }
-
-        /* Close the database connection. */
-        this.closeDatabaseConnection(conn, requestedConnection);
+        if (null != queryResponse.nearbyAddresses) {
+          addressesInSameNetwork = Arrays.asList(queryResponse.nearbyAddresses);
+        }
       }
     }
 
@@ -411,6 +363,94 @@ public class ExoneraTorServlet extends HttpServlet {
 
   /* Helper methods for querying the database. */
 
+  private QueryResponse queryDatabase(String relayIp, String timestampStr) {
+
+    QueryResponse response = null;
+    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+    dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+    SimpleDateFormat validAfterTimeFormat = new SimpleDateFormat(
+        "yyyy-MM-dd HH:mm:ss");
+    validAfterTimeFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+    long timestamp = 0L;
+    if (timestampStr != null && timestampStr.length() > 0) {
+      try {
+        timestamp = dateFormat.parse(timestampStr).getTime();
+      } catch (ParseException e) {
+        /* Already checked in parseTimestamp(). */
+      }
+    }
+
+    /* Only query the database if we received valid user input. */
+    if (!"".equals(relayIp) && !"".equals(timestampStr)) {
+
+      /* Open a database connection that we'll use to handle the whole
+       * request. */
+      long requestedConnection = System.currentTimeMillis();
+      Connection conn = this.connectToDatabase();
+      if (null != conn) {
+
+        response = new QueryResponse();
+        response.queryAddress = relayIp;
+        response.queryDate = timestampStr;
+
+        /* Look up first and last date in the database. */
+        long[] firstAndLastDates = this.queryFirstAndLastDatesFromDatabase(
+            conn);
+        if (null != firstAndLastDates) {
+          response.firstDateInDatabase = dateFormat.format(
+              firstAndLastDates[0]);
+          response.lastDateInDatabase = dateFormat.format(firstAndLastDates[1]);
+
+          /* Consider all consensuses published on or within a day of the given
+           * date. */
+          long timestampFrom = timestamp - 24L * 60L * 60L * 1000L;
+          long timestampTo = timestamp + 2 * 24L * 60L * 60L * 1000L - 1L;
+          String fromValidAfter = validAfterTimeFormat.format(timestampFrom);
+          String toValidAfter = validAfterTimeFormat.format(timestampTo);
+          SortedSet<Long> relevantConsensuses =
+              this.queryKnownConsensusValidAfterTimes(conn, fromValidAfter,
+              toValidAfter);
+          if (null != relevantConsensuses && !relevantConsensuses.isEmpty()) {
+            response.relevantStatuses = true;
+
+            /* Search for status entries with the given IP address as onion
+             * routing address, plus status entries of relays having an exit
+             * list entry with the given IP address as exit address. */
+            List<QueryResponse.Match> matches = this.queryStatusEntries(conn,
+                relayIp, timestamp, validAfterTimeFormat);
+            if (!matches.isEmpty()) {
+              response.matches = matches.toArray(new QueryResponse.Match[0]);
+
+            /* If we didn't find anything, run another query to find out if
+             * there are relays running on other IP addresses in the same /24 or
+             * /48 network and tell the user about it. */
+            } else {
+              if (!relayIp.contains(":")) {
+                String address24 = this.convertIpV4ToHex(relayIp)
+                    .substring(0, 6);
+                if (address24 != null) {
+                  response.nearbyAddresses = this.queryAddressesInSame24(conn,
+                      address24, timestamp).toArray(new String[0]);
+                }
+              } else {
+                String address48 = this.convertIpV6ToHex(relayIp)
+                    .substring(0, 12);
+                if (address48 != null) {
+                  response.nearbyAddresses = this.queryAddressesInSame48(conn,
+                      address48, timestamp).toArray(new String[0]);
+                }
+              }
+            }
+          }
+        }
+
+        /* Close the database connection. */
+        this.closeDatabaseConnection(conn, requestedConnection);
+      }
+    }
+    return response;
+  }
+
   private Connection connectToDatabase() {
     Connection conn = null;
     try {
@@ -468,10 +508,10 @@ public class ExoneraTorServlet extends HttpServlet {
     return relevantConsensuses;
   }
 
-  private List<String[]> queryStatusEntries(Connection conn,
+  private List<QueryResponse.Match> queryStatusEntries(Connection conn,
       String relayIp, long timestamp,
       SimpleDateFormat validAfterTimeFormat) {
-    List<String[]> statusEntries = new ArrayList<>();
+    List<QueryResponse.Match> matches = new ArrayList<>();
     String addressHex = !relayIp.contains(":")
         ? this.convertIpV4ToHex(relayIp) : this.convertIpV6ToHex(relayIp);
     if (addressHex == null) {
@@ -496,7 +536,7 @@ public class ExoneraTorServlet extends HttpServlet {
         SortedSet<String> addresses = new TreeSet<>();
         SortedSet<String> addressesHex = new TreeSet<>();
         String nickname = null;
-        String exit = "U";
+        Boolean exit = null;
         for (String line : new String(rawstatusentry).split("\n")) {
           if (line.startsWith("r ")) {
             String[] parts = line.split(" ");
@@ -512,7 +552,7 @@ public class ExoneraTorServlet extends HttpServlet {
                 : this.convertIpV6ToHex(address);
             addressesHex.add(orAddressHex);
           } else if (line.startsWith("p ")) {
-            exit = line.equals("p reject 1-65535") ? "N" : "Y";
+            exit = !line.equals("p reject 1-65535");
           }
         }
         String exitaddress = rs.getString(4);
@@ -523,25 +563,24 @@ public class ExoneraTorServlet extends HttpServlet {
         if (!addressesHex.contains(addressHex)) {
           continue;
         }
-        StringBuilder sb = new StringBuilder();
-        int writtenAddresses = 0;
-        for (String address : addresses) {
-          sb.append((writtenAddresses++ > 0 ? ", " : "") + address);
-        }
         long validafter = rs.getTimestamp(2, utcCalendar).getTime();
         String validAfterString = validAfterTimeFormat.format(validafter);
         String fingerprint = rs.getString(3).toUpperCase();
-        String[] statusEntry = new String[] { validAfterString,
-            sb.toString(), fingerprint, nickname, exit };
-        statusEntries.add(statusEntry);
+        QueryResponse.Match match = new QueryResponse.Match();
+        match.timestamp = validAfterString;
+        match.addresses = addresses.toArray(new String[0]);
+        match.fingerprint = fingerprint;
+        match.nickname = nickname;
+        match.exit = exit;
+        matches.add(match);
       }
       rs.close();
       cs.close();
     } catch (SQLException e) {
       /* Nothing found. */
-      statusEntries = null;
+      matches.clear();
     }
-    return statusEntries;
+    return matches;
   }
 
   private List<String> queryAddressesInSame24(Connection conn,
