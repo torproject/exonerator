@@ -9,6 +9,7 @@ import org.apache.commons.lang.StringEscapeUtils;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.text.ParseException;
@@ -143,7 +144,8 @@ public class ExoneraTorServlet extends HttpServlet {
         Locale.forLanguageTag(langStr));
 
     /* Start writing response. */
-    PrintWriter out = response.getWriter();
+    StringWriter so = new StringWriter();
+    PrintWriter out = new PrintWriter(so);
     this.writeHeader(out, rb, langStr);
 
     /* Write form. */
@@ -161,39 +163,31 @@ public class ExoneraTorServlet extends HttpServlet {
      * This is the start page. */
     if ("".equals(relayIp) && "".equals(timestampStr)) {
       this.writeFooter(out, rb, null, null);
-      return;
-    }
 
     /* If we were unable to connect to the database, write an error message. */
-    if (!successfullyConnectedToDatabase) {
+    } else if (!successfullyConnectedToDatabase) {
       this.writeSummaryUnableToConnectToDatabase(out, rb);
       this.writeFooter(out, rb, null, null);
-      return;
-    }
 
     /* Similarly, if we found the database to be empty, write an error message,
      * too. */
-    if (null == firstDate || null == lastDate) {
+    } else if (null == firstDate || null == lastDate) {
       this.writeSummaryNoData(out, rb);
       this.writeFooter(out, rb, null, null);
-      return;
-    }
 
     /* If either parameter is empty, print summary with warning message
      * and exit. */
-    if ("".equals(relayIp) || "".equals(timestampStr)) {
+    } else if ("".equals(relayIp) || "".equals(timestampStr)) {
       if ("".equals(relayIp)) {
         writeSummaryNoIp(out, rb);
       } else {
         writeSummaryNoTimestamp(out, rb);
       }
       this.writeFooter(out, rb, null, null);
-      return;
-    }
 
     /* If there's a user error, print summary with exit message and
      * exit. */
-    if (relayIpHasError || timestampHasError || timestampOutOfRange) {
+    } else if (relayIpHasError || timestampHasError || timestampOutOfRange) {
       if (relayIpHasError) {
         this.writeSummaryInvalidIp(out, rb, ipParameter);
       } else if (timestampHasError) {
@@ -203,17 +197,13 @@ public class ExoneraTorServlet extends HttpServlet {
             firstDate, lastDate);
       }
       this.writeFooter(out, rb, relayIp, timestampStr);
-      return;
-    }
 
-    if (noRelevantConsensuses) {
+    } else if (noRelevantConsensuses) {
       this.writeSummaryNoDataForThisInterval(out, rb);
       this.writeFooter(out, rb, relayIp, timestampStr);
-      return;
-    }
 
     /* Print out result. */
-    if (!statusEntries.isEmpty()) {
+    } else if (!statusEntries.isEmpty()) {
       this.writeSummaryPositive(out, rb, relayIp, timestampStr);
       this.writeTechnicalDetails(out, rb, relayIp, timestampStr,
           statusEntries);
@@ -228,6 +218,12 @@ public class ExoneraTorServlet extends HttpServlet {
     this.writePermanentLink(out, rb, relayIp, timestampStr, langStr);
 
     this.writeFooter(out, rb, relayIp, timestampStr);
+
+    /* Forward to the JSP that adds header and footer. */
+    request.setAttribute("lang", langStr);
+    request.setAttribute("body", so.toString());
+    request.getRequestDispatcher("WEB-INF/index.jsp").forward(request,
+        response);
   }
 
   /* Helper methods for handling the request. */
@@ -339,38 +335,7 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private void writeHeader(PrintWriter out, ResourceBundle rb, String langStr)
       throws IOException {
-    out.printf("<!DOCTYPE html>\n"
-        + "<html lang=\"%s\">\n"
-        + "  <head>\n"
-        + "    <meta charset=\"utf-8\">\n"
-        + "    <meta http-equiv=\"X-UA-Compatible\" "
-          + "content=\"IE=edge\">\n"
-        + "    <meta name=\"viewport\" content=\"width=device-width, "
-          + "initial-scale=1\">\n"
-        + "    <title>ExoneraTor</title>\n"
-        + "    <link rel=\"stylesheet\" href=\"css/bootstrap.min.css\">\n"
-        + "    <link rel=\"stylesheet\" href=\"css/exonerator.css\">\n"
-        + "    <link href=\"images/favicon.ico\" type=\"image/x-icon\" "
-          + "rel=\"icon\">\n"
-        + "  </head>\n"
-        + "  <body>\n"
-        + "    <div class=\"container\">\n"
-        + "      <div class=\"row\">\n"
-        + "        <div class=\"col-xs-12\">\n"
-        + "          <div class=\"page-header\">\n"
-        + "            <h1>\n"
-        + "              <div class=\"text-center\">\n"
-        + "                <a href=\"/?lang=%<s\">"
-          + "<img src=\"images/exonerator-logo.png\" "
-          + "width=\"334\" height=\"252\" alt=\"ExoneraTor logo\">"
-          + "<img src=\"images/exonerator-wordmark.png\" width=\"428\" "
-          + "height=\"63\" alt=\"ExoneraTor wordmark\"></a>\n"
-        + "              </div><!-- text-center -->\n"
-        + "            </h1>\n"
-        + "          </div><!-- page-header -->\n"
-        + "        </div><!-- col -->\n"
-        + "      </div><!-- row -->\n",
-        langStr);
+    out.printf("    <div class=\"container\">\n");
   }
 
   private void writeForm(PrintWriter out, ResourceBundle rb,
@@ -663,13 +628,12 @@ public class ExoneraTorServlet extends HttpServlet {
   private void writeFooter(PrintWriter out, ResourceBundle rb, String relayIp,
       String timestampStr) throws IOException {
     out.printf("    </div><!-- container -->\n"
-        + "    <div class=\"footer\">\n"
-        + "      <div class=\"container\">\n"
-        + "        <div class=\"row\">\n"
-        + "          <div class=\"col-xs-6\">\n"
-        + "            <h3>%s</h3>\n"
-        + "            <p class=\"small\">%s</p>\n"
-        + "          </div><!-- col -->\n",
+        + "    <div class=\"container\">\n"
+        + "      <div class=\"row\">\n"
+        + "        <div class=\"col-xs-6\">\n"
+        + "          <h3>%s</h3>\n"
+        + "          <p class=\"small\">%s</p>\n"
+        + "        </div><!-- col -->\n",
         rb.getString("footer.abouttor.heading"),
         String.format(rb.getString("footer.abouttor.body.text"),
             "<a href=\"https://www.torproject.org/about/"
@@ -679,16 +643,16 @@ public class ExoneraTorServlet extends HttpServlet {
             + rb.getString("footer.abouttor.body.link2") + "</a>",
             "<a href=\"https://www.torproject.org/about/contact\">"
             + rb.getString("footer.abouttor.body.link3") + "</a>"));
-    out.printf("          <div class=\"col-xs-6\">\n"
-        + "            <h3>%s</h3>\n"
-        + "            <p class=\"small\">%s</p>\n"
-        + "          </div><!-- col -->\n"
-        + "        </div><!-- row -->\n",
+    out.printf("        <div class=\"col-xs-6\">\n"
+        + "          <h3>%s</h3>\n"
+        + "          <p class=\"small\">%s</p>\n"
+        + "        </div><!-- col -->\n"
+        + "      </div><!-- row -->\n",
         rb.getString("footer.aboutexonerator.heading"),
         rb.getString("footer.aboutexonerator.body"));
-    out.printf("        <div class=\"row\">\n"
-        + "          <div class=\"col-xs-12\">\n"
-        + "            <p class=\"text-center small\">%s",
+    out.printf("      <div class=\"row\">\n"
+        + "        <div class=\"col-xs-12\">\n"
+        + "          <p class=\"text-center small\">%s",
         rb.getString("footer.language.text"));
     for (Map.Entry<String, String> entry
         : this.availableLanguageNames.entrySet()) {
@@ -701,21 +665,9 @@ public class ExoneraTorServlet extends HttpServlet {
       }
     }
     out.printf("</p>\n"
-        + "          </div><!-- col -->\n"
-        + "        </div><!-- row -->\n"
-        + "        <div class=\"row\">\n"
-        + "          <div class=\"col-xs-12\">\n"
-        + "            <p class=\"text-center small\">%s</p>\n"
-        + "          </div><!-- col -->\n"
-        + "        </div><!-- row -->\n"
-        + "      </div><!-- container -->\n"
-        + "    </div><!-- footer -->\n"
-        + "  </body>\n"
-        + "</html>\n",
-        String.format(rb.getString("footer.trademark.text"),
-            "<a href=\"https://www.torproject.org/docs/"
-            + "trademark-faq.html.en\">"
-            + rb.getString("footer.trademark.link") + "</a>"));
+        + "        </div><!-- col -->\n"
+        + "      </div><!-- row -->\n"
+        + "    </div><!-- container -->\n");
     out.close();
   }
 }
