@@ -3,10 +3,10 @@
 
 package org.torproject.exonerator;
 
-import com.google.gson.Gson;
 import org.apache.commons.lang.StringEscapeUtils;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -40,12 +40,6 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private String exoneraTorHost = "https://exonerator.torproject.org";
 
-  /* Don't accept query responses with versions lower than this. */
-  private static final String firstRecognizedVersion = "1.0";
-
-  /* Don't accept query responses with this version or higher. */
-  private static final String firstUnrecognizedVersion = "2.0";
-
   private List<String> availableLanguages =
       Arrays.asList("de", "en", "fr", "ro", "sv");
 
@@ -54,10 +48,7 @@ public class ExoneraTorServlet extends HttpServlet {
   @Override
   public void init(ServletConfig config) throws ServletException {
     super.init(config);
-
-    /* Initialize logger. */
     this.logger = Logger.getLogger(ExoneraTorServlet.class.toString());
-
     this.availableLanguageNames = new TreeMap<>();
     for (String locale : this.availableLanguages) {
       ResourceBundle rb = ResourceBundle.getBundle("ExoneraTor",
@@ -76,13 +67,12 @@ public class ExoneraTorServlet extends HttpServlet {
 
     /* Parse ip parameter. */
     String ipParameter = request.getParameter("ip");
-    String relayIp = this.parseIpParameter(ipParameter);
+    String relayIp = parseIpParameter(ipParameter);
     final boolean relayIpHasError = relayIp == null;
 
     /* Parse timestamp parameter. */
     String timestampParameter = request.getParameter("timestamp");
-    String timestampStr = this.parseTimestampParameter(
-        timestampParameter);
+    String timestampStr = parseTimestampParameter(timestampParameter);
     final boolean timestampHasError = timestampStr == null;
 
     /* Parse lang parameter. */
@@ -93,21 +83,21 @@ public class ExoneraTorServlet extends HttpServlet {
       langStr = langParameter;
     }
 
-    /* Step 2: Query the database. */
+    /* Step 2: Query the backend server. */
 
-    boolean successfullyConnectedToDatabase = false;
+    boolean successfullyConnectedToBackend = false;
     String firstDate = null;
     String lastDate = null;
     boolean noRelevantConsensuses = true;
     List<String[]> statusEntries = new ArrayList<>();
     List<String> addressesInSameNetwork = null;
 
-    /* Only query the database if we received valid user input. */
+    /* Only query, if we received valid user input. */
     if (null != relayIp && !relayIp.isEmpty() && null != timestampStr
         && !timestampStr.isEmpty()) {
-      QueryResponse queryResponse = this.queryDatabase(relayIp, timestampStr);
+      QueryResponse queryResponse = this.queryBackend(relayIp, timestampStr);
       if (null != queryResponse) {
-        successfullyConnectedToDatabase = true;
+        successfullyConnectedToBackend = true;
         firstDate = queryResponse.firstDateInDatabase;
         lastDate = queryResponse.lastDateInDatabase;
         if (null != queryResponse.relevantStatuses
@@ -165,8 +155,8 @@ public class ExoneraTorServlet extends HttpServlet {
       this.writeFooter(out, rb, null, null);
 
     /* If we were unable to connect to the database, write an error message. */
-    } else if (!successfullyConnectedToDatabase) {
-      this.writeSummaryUnableToConnectToDatabase(out, rb);
+    } else if (!successfullyConnectedToBackend) {
+      this.writeSummaryUnableToConnectToBackend(out, rb);
       this.writeFooter(out, rb, null, null);
 
     /* Similarly, if we found the database to be empty, write an error message,
@@ -228,7 +218,10 @@ public class ExoneraTorServlet extends HttpServlet {
 
   /* Helper methods for handling the request. */
 
-  private String parseIpParameter(String passedIpParameter) {
+  /** Parse an IP parameter and return either a non-<code>null</code> value in
+   * case the parameter was valid or empty, or <code>null</code> if it was
+   * non-empty and invalid. */
+  static String parseIpParameter(String passedIpParameter) {
     String relayIp = null;
     if (passedIpParameter != null && passedIpParameter.length() > 0) {
       String ipParameter = passedIpParameter.trim();
@@ -283,8 +276,10 @@ public class ExoneraTorServlet extends HttpServlet {
     return relayIp;
   }
 
-  private String parseTimestampParameter(
-      String passedTimestampParameter) {
+  /** Parse a timestamp parameter and return either a non-<code>null</code>
+   * value in case the parameter was valid or empty, or <code>null</code> if it
+   * was non-empty and invalid. */
+  static String parseTimestampParameter(String passedTimestampParameter) {
     String timestampStr = "";
     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
     dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -304,31 +299,17 @@ public class ExoneraTorServlet extends HttpServlet {
 
   /* Helper method for fetching a query response via URL. */
 
-  private QueryResponse queryDatabase(String relayIp, String timestampStr) {
-    QueryResponse response;
+  private QueryResponse queryBackend(String relayIp, String timestampStr) {
     try (InputStreamReader isr = new InputStreamReader(new URL(
         this.exoneraTorHost + "/query.json?ip=" + relayIp + "&timestamp="
         + timestampStr).openStream())) {
-      Gson gson = new Gson();
-      response = gson.fromJson(isr, QueryResponse.class);
-      if (null == response || null == response.version) {
-        logger.warning("Response is either empty or does not contain "
-            + "version information.");
-        response = null;
-      } else if (response.version.compareTo(firstRecognizedVersion) < 0
-          || response.version.compareTo(firstUnrecognizedVersion) >= 0) {
-        logger.warning("Response has either an older or a newer version ("
-            + response.version + ") than we can handle ("
-            + firstRecognizedVersion + " <= x < " + firstUnrecognizedVersion
-            + ").");
-        response = null;
-      }
-    } catch (IOException | RuntimeException e) {
-      /* This could be anything, but the effect is that we don't have a query
-       * response to process further. */
-      response = null;
+      return QueryResponse.fromJson(isr);
+    } catch (IOException e) {
+      /* No result from backend, so that we don't have a query response to
+       * process further. */
+      logger.severe("Backend query failed: " + e.getMessage());
     }
-    return response;
+    return null;
   }
 
   /* Helper methods for writing the response. */
@@ -389,7 +370,7 @@ public class ExoneraTorServlet extends HttpServlet {
         rb.getString("form.search.label"));
   }
 
-  private void writeSummaryUnableToConnectToDatabase(PrintWriter out,
+  private void writeSummaryUnableToConnectToBackend(PrintWriter out,
       ResourceBundle rb) throws IOException {
     String contactLink =
         "<a href=\"https://www.torproject.org/about/contact\">"
@@ -592,12 +573,18 @@ public class ExoneraTorServlet extends HttpServlet {
           content = "("
               + rb.getString("technicaldetails.nickname.unknown") + ")";
         } else if (i == 4) {
-          if (content.equals("U")) {
-            content = rb.getString("technicaldetails.exit.unknown");
-          } else if (content.equals("Y")) {
-            content = rb.getString("technicaldetails.exit.yes");
-          } else {
-            content = rb.getString("technicaldetails.exit.no");
+          switch (content) {
+            case "U":
+              content = rb.getString("technicaldetails.exit.unknown");
+              break;
+            case "Y":
+              content = rb.getString("technicaldetails.exit.yes");
+              break;
+            case "N":
+              content = rb.getString("technicaldetails.exit.no");
+              break;
+            default: // should never happen
+              logger.warning("Unknown content: " + content);
           }
         }
         out.print("                <td" + attributes + ">" + content + "</td>");
