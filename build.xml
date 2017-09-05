@@ -6,27 +6,46 @@
   <property name="webapp" value="src/main/webapp"/>
   <property name="generated" value="generated/"/>
   <property name="classes" value="${generated}/classes"/>
+  <property name="testclasses" value="${generated}/testclasses/"/>
   <property name="dist" value="${generated}/dist"/>
   <property name="testresources" value="src/test/resources/"/>
+  <property name="testsources" value="src/test/java"/>
+  <property name="testresult" value="${generated}/test-results"/>
   <property name="libs" value="lib"/>
   <property name="webxmlfile" value="src/main/webapp/web.xml"/>
   <property name="warfile" value="${dist}/exonerator.war"/>
   <property name="source-and-target-java-version" value="1.7" />
   <property name="metricslibversion" value="2.0.0" />
+  <patternset id="runtime" >
+    <include name="metrics-lib-${metricslibversion}.jar"/>
+    <include name="commons-compress-1.13.jar"/>
+    <include name="commons-codec-1.10.jar"/>
+    <include name="commons-lang-2.6.jar"/>
+    <include name="gson-2.4.jar" />
+    <include name="postgresql-9.4.1212.jar"/>
+    <include name="servlet-api-3.0.jar"/>
+    <include name="logback-core-1.1.9.jar" />
+    <include name="logback-classic-1.1.9.jar" />
+    <include name="slf4j-api-1.7.22.jar"/>
+    <include name="xz-1.6.jar"/>
+  </patternset>
   <path id="classpath">
     <pathelement path="${classes}"/>
     <fileset dir="${libs}">
-      <include name="metrics-lib-${metricslibversion}.jar"/>
-      <include name="commons-compress-1.13.jar"/>
-      <include name="commons-codec-1.10.jar"/>
-      <include name="commons-lang-2.6.jar"/>
-      <include name="gson-2.4.jar" />
-      <include name="postgresql-9.4.1212.jar"/>
-      <include name="servlet-api-3.0.jar"/>
-      <include name="logback-core-1.1.9.jar" />
-      <include name="logback-classic-1.1.9.jar" />
-      <include name="slf4j-api-1.7.22.jar"/>
-      <include name="xz-1.6.jar"/>
+      <patternset refid="runtime" />
+    </fileset>
+  </path>
+  <path id="test.classpath">
+    <pathelement path="${classes}"/>
+    <pathelement path="${resources}"/>
+    <pathelement path="${testclasses}"/>
+    <pathelement path="${testresources}"/>
+    <fileset dir="${libs}">
+      <patternset refid="runtime" />
+    </fileset>
+    <fileset dir="${libs}">
+      <include name="junit4-4.12.jar"/>
+      <include name="hamcrest-all-1.3.jar"/>
     </fileset>
   </path>
   <path id="checkstyle.classpath" >
@@ -44,6 +63,7 @@
   <target name="init">
     <copy file="${resources}/config" tofile="${basedir}/config"/>
     <mkdir dir="${classes}"/>
+    <mkdir dir="${testclasses}"/>
     <mkdir dir="${dist}"/>
   </target>
 
@@ -62,6 +82,33 @@
     </javac>
   </target>
 
+  <target name="testcompile" depends="init">
+    <javac destdir="${testclasses}"
+           srcdir="${testsources}"
+           source="${source-and-target-java-version}"
+           target="${source-and-target-java-version}"
+           debug="true"
+           deprecation="true"
+           optimize="false"
+           failonerror="true"
+           includeantruntime="false">
+      <classpath refid="test.classpath"/>
+    </javac>
+  </target>
+
+  <target name="test" depends="compile,testcompile">
+    <junit fork="true"
+           haltonfailure="true"
+           printsummary="on">
+      <classpath refid="test.classpath"/>
+      <formatter type="plain" usefile="false"/>
+      <batchtest>
+        <fileset dir="${testclasses}"
+                 includes="**/*Test.class"/>
+      </batchtest>
+    </junit>
+  </target>
+
   <!-- Import descriptors into the ExoneraTor database. -->
   <target name="run" depends="compile">
     <java fork="true"
@@ -77,6 +124,8 @@
   <target name="checks" depends="compile">
     <checkstyle config="${testresources}/metrics_checks.xml">
       <fileset dir="${sources}"
+               includes="**/*.java" />
+      <fileset dir="${testsources}"
                includes="**/*.java" />
       <classpath>
         <path refid="classpath" />
