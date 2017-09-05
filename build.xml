@@ -158,6 +158,7 @@
         <include name="commons-lang-2.6.jar"/>
         <include name="gson-2.4.jar" />
         <include name="postgresql-9.4.1212.jar"/>
+        <include name="slf4j-api-1.7.22.jar"/>
       </lib>
       <classes dir="${classes}"/>
       <zipfileset dir="${resources}"

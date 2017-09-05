@@ -7,28 +7,30 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.io.Reader;
 import java.util.Objects;
-import java.util.logging.Logger;
 
 /** Query response from the ExoneraTor database. */
 public class QueryResponse {
 
   @Expose(serialize = false, deserialize = false)
-  private static Logger logger = Logger.getLogger(QueryResponse.class.toString());
+  private static Logger logger = LoggerFactory.getLogger(QueryResponse.class);
 
-  /* Actual response format version implemented by this class. */
+  /* Actual version implemented by this class. */
   @Expose(serialize = false, deserialize = false)
   private static final String VERSION = "1.0";
 
   /* Don't accept query responses with versions lower than this. */
   @Expose(serialize = false, deserialize = false)
-  private static final String FIRST_RECOGNIZED_VERSION = "1.0";
+  private static final String FIRSTRECOGNIZEDVERSION = "1.0";
 
   /* Don't accept query responses with this version or higher. */
   @Expose(serialize = false, deserialize = false)
-  private static final String FIRST_UNRECOGNIZED_VERSION = "2.0";
+  private static final String FIRSTUNRECOGNIZEDVERSION = "2.0";
 
   /** Version of this response format. */
   @Expose
@@ -96,20 +98,19 @@ public class QueryResponse {
     try {
       QueryResponse response = gson.fromJson(reader, QueryResponse.class);
       if (null == response || null == response.version) {
-        logger.warning("Response is either empty or does not contain "
+        logger.warn("Response is either empty or does not contain "
             + "version information.");
         return null;
-      } else if (response.version.compareTo(FIRST_RECOGNIZED_VERSION) < 0
-          || response.version.compareTo(FIRST_UNRECOGNIZED_VERSION) >= 0) {
-        logger.warning("Response has either an older or a newer version ("
-            + response.version + ") than we can handle ("
-            + FIRST_RECOGNIZED_VERSION + " <= x < " + FIRST_UNRECOGNIZED_VERSION
-            + ").");
+      } else if (response.version.compareTo(FIRSTRECOGNIZEDVERSION) < 0
+          || response.version.compareTo(FIRSTUNRECOGNIZEDVERSION) >= 0) {
+        logger.error("Response has version {}, which is not in the range "
+            + "of versions we can handle: {} <= x < {}).", response.version,
+            FIRSTRECOGNIZEDVERSION, FIRSTUNRECOGNIZEDVERSION);
         return null;
       }
       return response;
     } catch (RuntimeException e) {
-      logger.severe("JSON decoding failed: " + e.getMessage());
+      logger.error("JSON decoding failed.", e);
     }
     return null;
   }

@@ -5,6 +5,9 @@ package org.torproject.exonerator;
 
 import org.apache.commons.lang.StringEscapeUtils;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -23,7 +26,6 @@ import java.util.ResourceBundle;
 import java.util.SortedMap;
 import java.util.TimeZone;
 import java.util.TreeMap;
-import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 import javax.servlet.ServletConfig;
@@ -48,7 +50,7 @@ public class ExoneraTorServlet extends HttpServlet {
   @Override
   public void init(ServletConfig config) throws ServletException {
     super.init(config);
-    this.logger = Logger.getLogger(ExoneraTorServlet.class.toString());
+    this.logger = LoggerFactory.getLogger(ExoneraTorServlet.class);
     this.availableLanguageNames = new TreeMap<>();
     for (String locale : this.availableLanguages) {
       ResourceBundle rb = ResourceBundle.getBundle("ExoneraTor",
@@ -307,7 +309,7 @@ public class ExoneraTorServlet extends HttpServlet {
     } catch (IOException e) {
       /* No result from backend, so that we don't have a query response to
        * process further. */
-      logger.severe("Backend query failed: " + e.getMessage());
+      logger.error("Backend query failed.", e);
     }
     return null;
   }
@@ -584,7 +586,7 @@ public class ExoneraTorServlet extends HttpServlet {
               content = rb.getString("technicaldetails.exit.no");
               break;
             default: // should never happen
-              logger.warning("Unknown content: " + content);
+              logger.warn("Unknown content: '{}'.", content);
           }
         }
         out.print("                <td" + attributes + ">" + content + "</td>");

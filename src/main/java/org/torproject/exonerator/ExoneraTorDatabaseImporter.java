@@ -14,6 +14,9 @@ import org.torproject.descriptor.RelayNetworkStatusConsensus;
 
 import org.apache.commons.codec.binary.Hex;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -39,6 +42,9 @@ import java.util.TreeMap;
 /* Import Tor descriptors into the ExoneraTor database. */
 public class ExoneraTorDatabaseImporter {
 
+  private static Logger logger
+      = LoggerFactory.getLogger(ExoneraTorDatabaseImporter.class);
+
   /** Main function controlling the parsing process. */
   public static void main(String[] args) {
     readConfiguration();
@@ -63,7 +69,7 @@ public class ExoneraTorDatabaseImporter {
   private static void readConfiguration() {
     File configFile = new File("config");
     if (!configFile.exists()) {
-      System.err.println("Could not find config file.  Exiting.");
+      logger.error("Could not find config file.  Exiting.");
       System.exit(1);
     }
     String line = null;
@@ -82,7 +88,7 @@ public class ExoneraTorDatabaseImporter {
       }
       br.close();
     } catch (IOException e) {
-      System.err.println("Could not parse config file.  Exiting.");
+      logger.error("Could not parse config file.  Exiting.", e);
       System.exit(1);
     }
   }
@@ -95,7 +101,7 @@ public class ExoneraTorDatabaseImporter {
     try {
       connection = DriverManager.getConnection(jdbcString);
     } catch (SQLException e) {
-      System.out.println("Could not connect to database.  Exiting.");
+      logger.error("Could not connect to database.  Exiting.", e);
       System.exit(1);
     }
   }
@@ -113,8 +119,8 @@ public class ExoneraTorDatabaseImporter {
       insertExitlistentryStatement = connection.prepareCall(
           "{call insert_exitlistentry(?, ?, ?, ?, ?)}");
     } catch (SQLException e) {
-      System.out.println("Could not prepare callable statements to "
-          + "import data into the database.  Exiting.");
+      logger.warn("Could not prepare callable statements to "
+                  + "import data into the database.  Exiting.", e);
       System.exit(1);
     }
   }
@@ -130,12 +136,12 @@ public class ExoneraTorDatabaseImporter {
         br.close();
         if (System.currentTimeMillis() - runStarted
             < 6L * 60L * 60L * 1000L) {
-          System.out.println("File 'exonerator-lock' is less than 6 "
+          logger.warn("File 'exonerator-lock' is less than 6 "
               + "hours old.  Exiting.");
           System.exit(1);
         } else {
-          System.out.println("File 'exonerator-lock' is at least 6 hours "
-              + "old.  Overwriting and executing anyway.");
+          logger.warn("File 'exonerator-lock' is at least 6 hours old."
+              + "  Overwriting and executing anyway.");
         }
       }
       BufferedWriter bw = new BufferedWriter(new FileWriter(
@@ -143,8 +149,7 @@ public class ExoneraTorDatabaseImporter {
       bw.append(String.valueOf(System.currentTimeMillis()) + "\n");
       bw.close();
     } catch (IOException e) {
-      System.out.println("Could not create 'exonerator-lock' file.  "
-          + "Exiting.");
+      logger.warn("Could not create 'exonerator-lock' file.  Exiting.");
       System.exit(1);
     }
   }
@@ -179,9 +184,9 @@ public class ExoneraTorDatabaseImporter {
           lineNumber++;
           String[] parts = line.split(",");
           if (parts.length != 2) {
-            System.out.println("File 'stats/exonerator-import-history' "
-                + "contains a corrupt entry in line " + lineNumber
-                + ".  Ignoring parse history file entirely.");
+            logger.warn("File 'stats/exonerator-import-history' "
+                + "contains a corrupt entry in line {}.  "
+                + "Ignoring parse history file entirely.", lineNumber);
             lastImportHistory.clear();
             br.close();
             return;
@@ -192,7 +197,7 @@ public class ExoneraTorDatabaseImporter {
         }
         br.close();
       } catch (IOException e) {
-        System.out.println("Could not read import history.  Ignoring.");
+        logger.warn("Could not read import history.  Ignoring.", e);
         lastImportHistory.clear();
       }
     }
@@ -306,8 +311,8 @@ public class ExoneraTorDatabaseImporter {
             insertStatusentryStatement.setString(6,
                 orAddress.replaceAll("[\\[\\]]", ""));
           } else {
-            System.err.println("Could not import status entry with IPv6 "
-                + "address '" + orAddress + "'.  Exiting.");
+            logger.error("Could not import status entry with IPv6 "
+                         + "address '{}'.  Exiting.", orAddress);
             System.exit(1);
           }
         }
@@ -315,7 +320,7 @@ public class ExoneraTorDatabaseImporter {
         insertStatusentryStatement.execute();
       }
     } catch (SQLException e) {
-      System.out.println("Could not import status entry.  Exiting.");
+      logger.error("Could not import status entry.  Exiting.", e);
       System.exit(1);
     }
   }
@@ -360,7 +365,7 @@ public class ExoneraTorDatabaseImporter {
       insertExitlistentryStatement.setBytes(5, rawExitlistentry);
       insertExitlistentryStatement.execute();
     } catch (SQLException e) {
-      System.out.println("Could not import exit list entry.  Exiting.");
+      logger.error("Could not import exit list entry.  Exiting.", e);
       System.exit(1);
     }
   }
@@ -379,8 +384,8 @@ public class ExoneraTorDatabaseImporter {
       }
       bw.close();
     } catch (IOException e) {
-      System.out.println("File 'stats/exonerator-import-history' could "
-          + "not be written.  Ignoring.");
+      logger.warn("File 'stats/exonerator-import-history' could "
+          + "not be written.  Ignoring.", e);
     }
   }
 
@@ -389,8 +394,7 @@ public class ExoneraTorDatabaseImporter {
     try {
       connection.close();
     } catch (SQLException e) {
-      System.out.println("Could not close database connection.  "
-          + "Ignoring.");
+      logger.warn("Could not close database connection. Ignoring.", e);
     }
   }
 

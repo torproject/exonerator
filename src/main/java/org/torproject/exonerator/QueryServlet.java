@@ -3,8 +3,10 @@
 
 package org.torproject.exonerator;
 
-import com.google.gson.Gson;
 import org.apache.commons.codec.binary.Hex;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.sql.CallableStatement;
@@ -19,8 +21,6 @@ import java.util.List;
 import java.util.SortedSet;
 import java.util.TimeZone;
 import java.util.TreeSet;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 import javax.naming.Context;
@@ -44,9 +44,7 @@ public class QueryServlet extends HttpServlet {
 
   @Override
   public void init() {
-
-    /* Initialize logger. */
-    this.logger = Logger.getLogger(QueryServlet.class.toString());
+    this.logger = LoggerFactory.getLogger(QueryServlet.class);
 
     /* Look up data source. */
     try {
@@ -54,7 +52,7 @@ public class QueryServlet extends HttpServlet {
       this.ds = (DataSource) cxt.lookup("java:comp/env/jdbc/exonerator");
       this.logger.info("Successfully looked up data source.");
     } catch (NamingException e) {
-      this.logger.log(Level.WARNING, "Could not look up data source", e);
+      this.logger.warn("Could not look up data source", e);
     }
   }
 
@@ -96,17 +94,12 @@ public class QueryServlet extends HttpServlet {
     if (null == queryResponse) {
       response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
           "Database error.");
-      return;
+    } else {
+      /* Write the response. */
+      response.setContentType("application/json");
+      response.setCharacterEncoding("utf-8");
+      response.getWriter().write(QueryResponse.toJson(queryResponse));
     }
-
-    /* Format the query response. */
-    Gson gson = new Gson();
-    String formattedResponse = gson.toJson(queryResponse);
-
-    /* Write the response. */
-    response.setContentType("application/json");
-    response.setCharacterEncoding("utf-8");
-    response.getWriter().write(formattedResponse);
   }
 
   /* Helper methods for handling the request. */
@@ -314,12 +307,11 @@ public class QueryServlet extends HttpServlet {
       rs.close();
       cs.close();
       conn.close();
-      this.logger.info("Returned a database connection to the pool "
-          + "after " + (System.currentTimeMillis()
-          - requestedConnection) + " millis.");
+      this.logger.info("Returned a database connection to the pool after {}"
+          + " millis.", System.currentTimeMillis() - requestedConnection);
     } catch (SQLException e) {
       /* Nothing found. */
-      this.logger.log(Level.WARNING, "Database error: " + e.getMessage(), e);
+      this.logger.warn("Database error.  Returning 'null'.", e);
       return null;
     }
 
