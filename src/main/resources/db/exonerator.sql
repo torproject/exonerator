@@ -256,8 +256,7 @@ CREATE OR REPLACE FUNCTION search_by_address24_date (
           || '''::DATE + 1
       AND statusentry.validafter >= exitlistentry.scanned
       AND statusentry.validafter - exitlistentry.scanned <=
-          ''1 day''::INTERVAL
-  ORDER BY 2, 3, 4';
+          ''1 day''::INTERVAL';
   END;
 $$ LANGUAGE plpgsql;
 
@@ -291,8 +290,7 @@ CREATE OR REPLACE FUNCTION search_by_address48_date (
       FROM statusentry
       WHERE oraddress48 = ''' || select_address48 || '''
       AND DATE(validafter) >= ''' || select_date || '''::DATE - 1
-      AND DATE(validafter) <= ''' || select_date || '''::DATE + 1
-  ORDER BY 2, 3';
+      AND DATE(validafter) <= ''' || select_date || '''::DATE + 1';
   END;
 $$ LANGUAGE plpgsql;
 
