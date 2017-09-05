@@ -40,6 +40,8 @@ public class QueryServlet extends HttpServlet {
 
   private DataSource ds;
 
+  private static final long MILLISECONDS_IN_A_DAY = 24L * 60L * 60L * 1000L;
+
   @Override
   public void init() {
 
@@ -329,8 +331,8 @@ public class QueryServlet extends HttpServlet {
       response.firstDateInDatabase = dateFormat.format(allValidAfters.first());
       response.lastDateInDatabase = dateFormat.format(allValidAfters.last());
       response.relevantStatuses = false;
-      long timestampFrom = timestamp - 24L * 60L * 60L * 1000L;
-      long timestampTo = timestamp + 2 * 24L * 60L * 60L * 1000L - 1L;
+      long timestampFrom = timestamp - MILLISECONDS_IN_A_DAY;
+      long timestampTo = timestamp + 2 * MILLISECONDS_IN_A_DAY - 1L;
       for (long validAfter : allValidAfters) {
         if (validAfter >= timestampFrom && validAfter <= timestampTo) {
           response.relevantStatuses = true;
