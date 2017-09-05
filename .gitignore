@@ -2,15 +2,14 @@
 .classpath
 .project
 
-# Generated web archive
-exonerator.war
+# Generated stuff
+generated/
 
-# Compiled class files
-classes/
-
-# Possibly modified config file
-etc/context.xml
+# library folder
+lib/
 
 # Copied and possibly modified config file
 config
 
+# other
+*~
