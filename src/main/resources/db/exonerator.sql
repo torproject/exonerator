@@ -226,8 +226,10 @@ CREATE OR REPLACE FUNCTION search_by_address24_date (
   UNION
   SELECT DISTINCT NULL::BYTEA, validafter, NULL::CHARACTER, NULL::TEXT
       FROM statusentry
-      WHERE DATE(validafter) >= ''' || select_date || '''::DATE - 1
-      AND DATE(validafter) <= ''' || select_date || '''::DATE + 1
+      WHERE validafter BETWEEN (''' || select_date || '''::DATE - 1
+          || '' 00:00:00'')::TIMESTAMP WITHOUT TIME ZONE
+      AND (''' || select_date || '''::DATE + 1
+          || '' 23:59:59'')::TIMESTAMP WITHOUT TIME ZONE
   UNION
   SELECT rawstatusentry,
         validafter,
@@ -280,8 +282,10 @@ CREATE OR REPLACE FUNCTION search_by_address48_date (
   UNION
   SELECT DISTINCT NULL::BYTEA, validafter, NULL::CHARACTER, NULL::TEXT
       FROM statusentry
-      WHERE DATE(validafter) >= ''' || select_date || '''::DATE - 1
-      AND DATE(validafter) <= ''' || select_date || '''::DATE + 1
+      WHERE validafter BETWEEN (''' || select_date || '''::DATE - 1
+          || '' 00:00:00'')::TIMESTAMP WITHOUT TIME ZONE
+      AND (''' || select_date || '''::DATE + 1
+          || '' 23:59:59'')::TIMESTAMP WITHOUT TIME ZONE
   UNION
   SELECT rawstatusentry,
         validafter,
