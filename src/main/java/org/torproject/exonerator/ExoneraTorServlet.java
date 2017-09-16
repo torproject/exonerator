@@ -3,7 +3,7 @@
 
 package org.torproject.exonerator;
 
-import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.commons.lang3.StringEscapeUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -424,8 +424,8 @@ public class ExoneraTorServlet extends HttpServlet {
   private void writeSummaryInvalidIp(PrintWriter out, ResourceBundle rb,
       String ipParameter) throws IOException {
     String escapedIpParameter = ipParameter.length() > 40
-        ? StringEscapeUtils.escapeHtml(ipParameter.substring(0, 40))
-        + "[...]" : StringEscapeUtils.escapeHtml(ipParameter);
+        ? StringEscapeUtils.escapeHtml4(ipParameter.substring(0, 40))
+        + "[...]" : StringEscapeUtils.escapeHtml4(ipParameter);
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-danger",
         rb.getString("summary.invalidparams.invalidip.title"), null,
@@ -436,9 +436,9 @@ public class ExoneraTorServlet extends HttpServlet {
   private void writeSummaryInvalidTimestamp(PrintWriter out,
       ResourceBundle rb, String timestampParameter) throws IOException {
     String escapedTimestampParameter = timestampParameter.length() > 20
-        ? StringEscapeUtils.escapeHtml(timestampParameter
+        ? StringEscapeUtils.escapeHtml4(timestampParameter
         .substring(0, 20)) + "[...]"
-        : StringEscapeUtils.escapeHtml(timestampParameter);
+        : StringEscapeUtils.escapeHtml4(timestampParameter);
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-danger",
         rb.getString("summary.invalidparams.invalidtimestamp.title"),

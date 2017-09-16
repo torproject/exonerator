@@ -20,7 +20,7 @@
     <include name="metrics-lib-${metricslibversion}.jar"/>
     <include name="commons-compress-1.13.jar"/>
     <include name="commons-codec-1.10.jar"/>
-    <include name="commons-lang-2.6.jar"/>
+    <include name="commons-lang3-3.5.jar"/>
     <include name="gson-2.4.jar" />
     <include name="postgresql-9.4.1212.jar"/>
     <include name="servlet-api-3.0.jar"/>
