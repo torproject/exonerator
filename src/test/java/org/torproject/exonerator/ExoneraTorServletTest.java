@@ -7,9 +7,6 @@ import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 
-import java.util.Arrays;
-import java.util.Collection;
-
 public class ExoneraTorServletTest {
 
   private static final String[][] ipTestData

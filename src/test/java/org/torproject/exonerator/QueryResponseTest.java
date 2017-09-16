@@ -5,7 +5,6 @@ package org.torproject.exonerator;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -29,7 +28,8 @@ public class QueryResponseTest {
           + "\"query_date\":\"2016-12-12\","
           + "\"first_date_in_database\":\"2016-01-01\","
           + "\"last_date_in_database\":\"2016-12-31\","
-          + "\"relevant_statuses\":true,\"matches\":[{\"timestamp\":\"2016-12-03\","
+          + "\"relevant_statuses\":true,"
+          + "\"matches\":[{\"timestamp\":\"2016-12-03\","
           + "\"addresses\":[\"12.13.14.15\","
           + "\"12.13.14.16\"],\"fingerprint\":\"fingerprint-not-checked\","
           + "\"nickname\":\"some name\","
@@ -56,7 +56,8 @@ public class QueryResponseTest {
           + "\"query_date\":\"2016-12-12\","
           + "\"first_date_in_database\":\"2016-01-01\","
           + "\"last_date_in_database\":\"2016-12-31\","
-          + "\"relevant_statuses\":true,\"matches\":[{\"timestamp\":\"2016-12-03\","
+          + "\"relevant_statuses\":true,"
+          + "\"matches\":[{\"timestamp\":\"2016-12-03\","
           + "\"addresses\":[\"12.13.14.15\","
           + "\"12.13.14.16\"],\"fingerprint\":\"fingerprint-not-checked\","
           + "\"nickname\":\"some name\","
@@ -80,7 +81,8 @@ public class QueryResponseTest {
           + "\"query_date\":\"2016-12-12\","
           + "\"first_date_in_database\":\"2016-01-01\","
           + "\"last_date_in_database\":\"2016-12-31\","
-          + "\"relevant_statuses\":false,\"matches\":[{\"timestamp\":\"2016-12-03\","
+          + "\"relevant_statuses\":false,"
+          + "\"matches\":[{\"timestamp\":\"2016-12-03\","
           + "\"addresses\":[\"12.13.14.15\","
           + "\"12.13.14.16\"],\"fingerprint\":\"fingerprint-not-checked\","
           + "\"nickname\":\"some name\"},{\"timestamp\":\"2012-12-03\","
@@ -105,8 +107,8 @@ public class QueryResponseTest {
     if (null == this.queryResponse) {
       assertNull(QueryResponse.fromJson(new StringReader(this.json)));
     } else {
-      assertEquals(json,
-          QueryResponse.toJson(QueryResponse.fromJson(new StringReader(this.json))));
+      assertEquals(json, QueryResponse
+          .toJson(QueryResponse.fromJson(new StringReader(this.json))));
     }
   }
 
