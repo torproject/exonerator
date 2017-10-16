@@ -154,6 +154,24 @@ public class ExoneraTorServlet extends HttpServlet {
     if ("".equals(relayIp) && "".equals(timestampStr)) {
       this.writeFooter(out, rb, null, null);
 
+    /* If only one parameter is empty and the other is not, print summary with
+     * warning message and exit. */
+    } else if ("".equals(relayIp)) {
+      this.writeSummaryNoIp(out, rb);
+      this.writeFooter(out, rb, null, null);
+    } else if ("".equals(timestampStr)) {
+      this.writeSummaryNoTimestamp(out, rb);
+      this.writeFooter(out, rb, null, null);
+
+    /* If there's an issue with parsing either of the parameters, print summary
+     * with error message and exit. */
+    } else if (relayIpHasError) {
+      this.writeSummaryInvalidIp(out, rb, ipParameter);
+      this.writeFooter(out, rb, null, null);
+    } else if (timestampHasError) {
+      this.writeSummaryInvalidTimestamp(out, rb, timestampParameter);
+      this.writeFooter(out, rb, null, null);
+
     /* If we were unable to connect to the database, write an error message. */
     } else if (!successfullyConnectedToBackend) {
       this.writeSummaryUnableToConnectToBackend(out, rb);
@@ -165,27 +183,10 @@ public class ExoneraTorServlet extends HttpServlet {
       this.writeSummaryNoData(out, rb);
       this.writeFooter(out, rb, null, null);
 
-    /* If either parameter is empty, print summary with warning message
-     * and exit. */
-    } else if ("".equals(relayIp) || "".equals(timestampStr)) {
-      if ("".equals(relayIp)) {
-        writeSummaryNoIp(out, rb);
-      } else {
-        writeSummaryNoTimestamp(out, rb);
-      }
-      this.writeFooter(out, rb, null, null);
-
-    /* If there's a user error, print summary with exit message and
-     * exit. */
-    } else if (relayIpHasError || timestampHasError || timestampOutOfRange) {
-      if (relayIpHasError) {
-        this.writeSummaryInvalidIp(out, rb, ipParameter);
-      } else if (timestampHasError) {
-        this.writeSummaryInvalidTimestamp(out, rb, timestampParameter);
-      } else if (timestampOutOfRange) {
-        this.writeSummaryTimestampOutsideRange(out, rb, timestampStr,
-            firstDate, lastDate);
-      }
+    /* If the requested date is out of range, tell the user. */
+    } else if (timestampOutOfRange) {
+      this.writeSummaryTimestampOutsideRange(out, rb, timestampStr,
+          firstDate, lastDate);
       this.writeFooter(out, rb, relayIp, timestampStr);
 
     } else if (noRelevantConsensuses) {
