@@ -1,3 +1,13 @@
+# Changes in version 1.0.2 - 2017-10-16
+
+ * Major changes
+   - Fix NullPointerException caused by invalid parameters.
+
+ * Minor changes
+   - Resolve checkstyle warnings from more recent guidelines.
+   - Update from Apache Commons Lang 2 to 3.
+
+
 # Changes in version 1.0.1 - 2017-09-16
 
  * Medium changes
