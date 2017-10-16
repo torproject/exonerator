@@ -193,21 +193,21 @@ public class ExoneraTorServlet extends HttpServlet {
       this.writeFooter(out, rb, relayIp, timestampStr);
 
     /* Print out result. */
-    } else if (!statusEntries.isEmpty()) {
-      this.writeSummaryPositive(out, rb, relayIp, timestampStr);
-      this.writeTechnicalDetails(out, rb, relayIp, timestampStr,
-          statusEntries);
-    } else if (addressesInSameNetwork != null
-        && !addressesInSameNetwork.isEmpty()) {
-      this.writeSummaryAddressesInSameNetwork(out, rb, relayIp,
-          timestampStr, langStr, addressesInSameNetwork);
     } else {
-      this.writeSummaryNegative(out, rb, relayIp, timestampStr);
+      if (!statusEntries.isEmpty()) {
+        this.writeSummaryPositive(out, rb, relayIp, timestampStr);
+        this.writeTechnicalDetails(out, rb, relayIp, timestampStr,
+            statusEntries);
+      } else if (addressesInSameNetwork != null
+          && !addressesInSameNetwork.isEmpty()) {
+        this.writeSummaryAddressesInSameNetwork(out, rb, relayIp,
+            timestampStr, langStr, addressesInSameNetwork);
+      } else {
+        this.writeSummaryNegative(out, rb, relayIp, timestampStr);
+      }
+      this.writePermanentLink(out, rb, relayIp, timestampStr, langStr);
+      this.writeFooter(out, rb, relayIp, timestampStr);
     }
-
-    this.writePermanentLink(out, rb, relayIp, timestampStr, langStr);
-
-    this.writeFooter(out, rb, relayIp, timestampStr);
 
     /* Forward to the JSP that adds header and footer. */
     request.setAttribute("lang", langStr);
