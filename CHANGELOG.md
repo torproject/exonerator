@@ -1,3 +1,9 @@
+# Changes in version 1.0.3 - 2017-10-16
+
+ * Major changes
+   - Handle parameter issues before database problems.
+
+
 # Changes in version 1.0.2 - 2017-10-16
 
  * Major changes
