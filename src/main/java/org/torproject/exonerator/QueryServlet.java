@@ -13,6 +13,7 @@ import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -245,77 +246,82 @@ public class QueryServlet extends HttpServlet {
     SortedSet<Long> allValidAfters = new TreeSet<>();
     List<QueryResponse.Match> matches = new ArrayList<>();
     SortedSet<String> allAddresses = new TreeSet<>();
-    try {
-      final long requestedConnection = System.currentTimeMillis();
-      Connection conn = this.ds.getConnection();
-      CallableStatement cs = conn.prepareCall(String.format(
+    final long requestedConnection = System.currentTimeMillis();
+    Calendar utcCalendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    try (Connection conn = this.ds.getConnection()) {
+      try (CallableStatement cs = conn.prepareCall(String.format(
           "{call search_by_address%s_date(?, ?)}",
-          relayIp.contains(":") ? 48 : 24));
-      cs.setString(1, address24Or48Hex);
-      Calendar utcCalendar = Calendar.getInstance(
-          TimeZone.getTimeZone("UTC"));
-      cs.setDate(2, new java.sql.Date(timestamp), utcCalendar);
-      ResultSet rs = cs.executeQuery();
-      while (rs.next()) {
-        long validafter = rs.getTimestamp(2, utcCalendar).getTime();
-        allValidAfters.add(validafter);
-        byte[] rawstatusentry = rs.getBytes(1);
-        if (null == rawstatusentry) {
-          continue;
-        }
-        SortedSet<String> addresses = new TreeSet<>();
-        SortedSet<String> addressesHex = new TreeSet<>();
-        String nickname = null;
-        Boolean exit = null;
-        for (String line : new String(rawstatusentry).split("\n")) {
-          if (line.startsWith("r ")) {
-            String[] parts = line.split(" ");
-            nickname = parts[1];
-            addresses.add(parts[6]);
-            addressesHex.add(this.convertIpV4ToHex(parts[6]));
-          } else if (line.startsWith("a ")) {
-            String address = line.substring("a ".length(),
-                line.lastIndexOf(":"));
-            addresses.add(address);
-            String orAddressHex = !address.contains(":")
-                ? this.convertIpV4ToHex(address)
-                : this.convertIpV6ToHex(address);
-            addressesHex.add(orAddressHex);
-          } else if (line.startsWith("p ")) {
-            exit = !line.equals("p reject 1-65535");
+          relayIp.contains(":") ? 48 : 24))) {
+        cs.setString(1, address24Or48Hex);
+        cs.setDate(2, new java.sql.Date(timestamp), utcCalendar);
+        try (ResultSet rs = cs.executeQuery()) {
+          while (rs.next()) {
+            Timestamp ts = rs.getTimestamp(2, utcCalendar);
+            if (null == ts) {
+              continue;
+            }
+            long validafter = ts.getTime();
+            allValidAfters.add(validafter);
+            byte[] rawstatusentry = rs.getBytes(1);
+            if (null == rawstatusentry) {
+              continue;
+            }
+            SortedSet<String> addresses = new TreeSet<>();
+            SortedSet<String> addressesHex = new TreeSet<>();
+            String nickname = null;
+            Boolean exit = null;
+            for (String line : new String(rawstatusentry).split("\n")) {
+              if (line.startsWith("r ")) {
+                String[] parts = line.split(" ");
+                nickname = parts[1];
+                addresses.add(parts[6]);
+                addressesHex.add(this.convertIpV4ToHex(parts[6]));
+              } else if (line.startsWith("a ")) {
+                String address = line.substring("a ".length(),
+                    line.lastIndexOf(":"));
+                addresses.add(address);
+                String orAddressHex = !address.contains(":")
+                    ? this.convertIpV4ToHex(address)
+                    : this.convertIpV6ToHex(address);
+                addressesHex.add(orAddressHex);
+              } else if (line.startsWith("p ")) {
+                exit = !line.equals("p reject 1-65535");
+              }
+            }
+            String exitaddress = rs.getString(4);
+            if (exitaddress != null && exitaddress.length() > 0) {
+              addresses.add(exitaddress);
+              addressesHex.add(this.convertIpV4ToHex(exitaddress));
+            }
+            allAddresses.addAll(addresses);
+            if (!addressesHex.contains(addressHex)) {
+              continue;
+            }
+            String validAfterString = validAfterTimeFormat.format(validafter);
+            String fingerprint = rs.getString(3).toUpperCase();
+            QueryResponse.Match match = new QueryResponse.Match();
+            match.timestamp = validAfterString;
+            match.addresses = addresses.toArray(new String[0]);
+            match.fingerprint = fingerprint;
+            match.nickname = nickname;
+            match.exit = exit;
+            matches.add(match);
           }
+        } catch (SQLException e) {
+          this.logger.warn("Result set error.  Returning 'null'.", e);
+          return null;
         }
-        String exitaddress = rs.getString(4);
-        if (exitaddress != null && exitaddress.length() > 0) {
-          addresses.add(exitaddress);
-          addressesHex.add(this.convertIpV4ToHex(exitaddress));
-        }
-        allAddresses.addAll(addresses);
-        if (!addressesHex.contains(addressHex)) {
-          continue;
-        }
-        String validAfterString = validAfterTimeFormat.format(validafter);
-        String fingerprint = rs.getString(3).toUpperCase();
-        QueryResponse.Match match = new QueryResponse.Match();
-        match.timestamp = validAfterString;
-        match.addresses = addresses.toArray(new String[0]);
-        match.fingerprint = fingerprint;
-        match.nickname = nickname;
-        match.exit = exit;
-        matches.add(match);
+        this.logger.info("Returned a database connection to the pool after {}"
+            + " millis.", System.currentTimeMillis() - requestedConnection);
+      } catch (SQLException e) {
+        this.logger.warn("Callable statement error.  Returning 'null'.", e);
+        return null;
       }
-      rs.close();
-      cs.close();
-      conn.close();
-      this.logger.info("Returned a database connection to the pool after {}"
-          + " millis.", System.currentTimeMillis() - requestedConnection);
-    } catch (SQLException e) {
-      /* Nothing found. */
+    } catch (Throwable e) { // Catch all problems left.
       this.logger.warn("Database error.  Returning 'null'.", e);
       return null;
     }
 
-    /* Create a query response object. */
     QueryResponse response = new QueryResponse();
     response.queryAddress = relayIp;
     response.queryDate = dateFormat.format(timestamp);
@@ -352,7 +358,6 @@ public class QueryServlet extends HttpServlet {
       }
     }
 
-    /* Return the query response. */
     return response;
   }
 }
