@@ -38,7 +38,8 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private Logger logger;
 
-  private String exoneraTorHost = "https://exonerator.torproject.org";
+  private String exoneraTorHost = System.getProperty("exonerator.url",
+      "https://exonerator.torproject.org");
 
   private List<String> availableLanguages =
       Arrays.asList("de", "en", "fr", "ro", "sv");
