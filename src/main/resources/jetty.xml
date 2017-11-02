@@ -28,8 +28,12 @@
       <Arg>jdbc/exonerator</Arg>
       <Arg>
         <New class="org.postgresql.ds.PGPoolingDataSource">
-          <Set name="user">dummydatabaseuser</Set>
-          <Set name="password">dummypassword</Set>
+          <Set name="user">
+            <SystemProperty name="exonerator.db.user" />
+          </Set>
+          <Set name="password">
+            <SystemProperty name="exonerator.db.pw" />
+          </Set>
           <Set name="databaseName">exonerator</Set>
           <Set name="serverName">localhost</Set>
           <Set name="dataSourceName">exonerator</Set>
