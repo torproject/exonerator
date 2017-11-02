@@ -1,3 +1,8 @@
+# Changes in version 2.0.0 - 2017-11-??
+
+ * Major changes
+   - Use an embedded Jetty.
+
 # Changes in version 1.0.3 - 2017-10-16
 
  * Major changes

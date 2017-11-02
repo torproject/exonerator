@@ -1,9 +1,10 @@
-# Eclipse files
-.classpath
-.project
+# hidden files
+.*
 
 # Generated stuff
 generated/
+LOGBASE_IS_UNDEFINED/
+cobertura.ser
 
 # library folder
 lib/

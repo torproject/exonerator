@@ -10,6 +10,7 @@
   <property name="implementation-title" value="ExoneraTor" />
   <property name="release.version" value="1.0.0-dev" />
   <property name="metricslibversion" value="2.1.1" />
+  <property name="jetty.version" value="-9.2.21.v20170120" />
   <property name="warfile"
             value="exonerator-${release.version}.war"/>
 
@@ -34,6 +35,8 @@
     <include name="commons-codec-1.10.jar"/>
     <include name="commons-lang3-3.5.jar"/>
     <include name="gson-2.4.jar" />
+    <include name="logback-core-1.1.9.jar" />
+    <include name="logback-classic-1.1.9.jar" />
     <include name="postgresql-9.4.1212.jar"/>
     <include name="slf4j-api-1.7.22.jar"/>
   </patternset>
@@ -42,43 +45,126 @@
     <patternset refid="common" />
     <include name="metrics-lib-${metricslibversion}.jar"/>
     <include name="commons-compress-1.13.jar"/>
-    <include name="servlet-api-3.0.jar"/>
-    <include name="logback-core-1.1.9.jar" />
-    <include name="logback-classic-1.1.9.jar" />
+    <include name="servlet-api-3.1.jar"/>
     <include name="xz-1.6.jar"/>
   </patternset>
 
   <patternset id="web" >
-    <patternset refid="common" />
+    <include name="jetty9-annotations${jetty.version}.jar"/>
+    <include name="jetty9-server${jetty.version}.jar"/>
+    <include name="jetty9-servlet${jetty.version}.jar"/>
+    <include name="jetty9-util${jetty.version}.jar"/>
+    <include name="jetty9-http${jetty.version}.jar"/>
+    <include name="jetty9-io${jetty.version}.jar"/>
+    <include name="jetty9-xml${jetty.version}.jar"/>
+    <include name="jetty9-webapp${jetty.version}.jar"/>
+    <include name="jetty9-continuation${jetty.version}.jar"/>
+    <include name="jetty9-security${jetty.version}.jar"/>
+  </patternset>
+
+  <patternset id="webruntime" >
+    <include name="asm-5.2.jar" />
+    <include name="asm-commons-5.2.jar" />
+    <include name="jetty9-plus${jetty.version}.jar"/>
+    <include name="jetty9-jndi${jetty.version}.jar"/>
+    <include name="jetty9-apache-jsp${jetty.version}-tweaked.jar" />
+    <include name="tomcat8-embed-jasper-8.5.14.jar" />
+    <include name="tomcat8-embed-el-8.5.14.jar" />
+    <include name="tomcat8-embed-core-8.5.14.jar" />
+    <include name="eclipse-ecj-3.11.1.jar" />
   </patternset>
 
   <patternset id="runtime" >
     <patternset refid="library" />
+    <patternset refid="web" />
   </patternset>
 
   <!-- Create a .war file for deployment. -->
   <target name="war"
           depends="compile">
+    <echo message="Removing problematic service definitions from"/>
+    <echo message="${libs}/jetty9-apache-jsp${jetty.version}.jar and using "/>
+    <echo message="${libs}/jetty9-apache-jsp${jetty.version}-tweaked.jar below." />
+    <delete file="${libs}/jetty9-apache-jsp${jetty.version}-tweaked.jar"
+            quiet="true" />
+    <jar destfile="${libs}/jetty9-apache-jsp${jetty.version}-tweaked.jar">
+      <zipfileset src="${libs}/jetty9-apache-jsp${jetty.version}.jar" >
+        <exclude name="**/javax.servlet.ServletContainerInitializer"/>
+      </zipfileset>
+    </jar>
     <war destfile="${dist}/${warfile}"
-         webxml="${resources}/web.xml">
+         duplicate="fail"
+         webxml="${resources}/web.xml"
+	       basedir="${classes}">
+      <restrict>
+        <not>
+          <and>
+            <name name="META-INF/*" />
+            <not>
+              <name name="META-INF/services/*" />
+            </not>
+          </and>
+        </not>
+        <archives>
+          <zips>
+            <fileset dir="${libs}">
+              <patternset refid="common" />
+              <patternset refid="web" />
+              <patternset refid="webruntime" />
+            </fileset>
+          </zips>
+        </archives>
+      </restrict>
+      <exclude name="**/Test*.class" />
+      <zipfileset dir="${resources}"
+                  prefix=""
+                  includes="logback.xml" />
       <zipfileset dir="${resources}/web"
                   prefix=""
-                  includes="css/* images/*"/>
+                  includes="css/* images/*" />
       <zipfileset dir="${resources}/web/jsps"
                   prefix="WEB-INF"
                   includes="*.jsp"/>
-      <lib dir="${libs}">
-        <patternset refid="web" />
-      </lib>
-      <classes dir="${classes}"/>
       <zipfileset dir="${resources}"
-                  prefix="WEB-INF/classes"
                   includes="*.properties" />
-      <metainf dir="${resources}"
-               includes="context.xml"/>
+      <fileset dir="${resources}" includes="jetty.xml" />
+      <manifest>
+        <attribute name="Implemented-By" value="The Tor Project" />
+        <attribute name="Implementation-Title" value="Exonerator Server"/>
+        <attribute name="Implementation-Version"
+                   value="${release.version}-${git.revision}"/>
+        <attribute name="Main-Class"
+                   value="org.torproject.exonerator.ServerMain" />
+      </manifest>
     </war>
   </target>
 
+  <!-- Create a test .war file for basic start w/o db resources. -->
+  <target name="smoke-test-war"
+          depends="war">
+
+    <delete file="${generated}/${name}-dummy-test.war"
+            quiet="true" />
+    <copy overwrite="true"
+          file="${resources}/test-web.xml"
+          tofile="${generated}/web.xml"/>
+    <jar destfile="${generated}/${name}-dummy-test.war">
+      <zipfileset src="${dist}/${warfile}" >
+        <exclude name="WEB-INF/web.xml"/>
+      </zipfileset>
+      <zipfileset dir="${generated}"
+                  prefix="WEB-INF"
+                  includes="web.xml" />
+      <manifest>
+        <attribute name="Implemented-By" value="The Tor Project" />
+        <attribute name="Implementation-Title" value="Test Exonerator Server"/>
+        <attribute name="Implementation-Version"
+                   value="${release.version}-${git.revision}"/>
+        <attribute name="Main-Class"
+                   value="org.torproject.exonerator.ServerMain" />
+      </manifest>
+    </jar>
+  </target>
 
   <!-- The following line adds the common targets and properties
        for Metrics' Java Projects.
