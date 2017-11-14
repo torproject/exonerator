@@ -29,10 +29,10 @@
       <Arg>
         <New class="org.postgresql.ds.PGPoolingDataSource">
           <Set name="user">
-            <SystemProperty name="exonerator.db.user" />
+            <SystemProperty name="exonerator.db.user" default="metrics" />
           </Set>
           <Set name="password">
-            <SystemProperty name="exonerator.db.pw" />
+            <SystemProperty name="exonerator.db.pw" default="password" />
           </Set>
           <Set name="databaseName">exonerator</Set>
           <Set name="serverName">localhost</Set>
