@@ -17,7 +17,7 @@
   <property name="name" value="exonerator"/>
 
   <property name="project-main-class"
-            value="org.torproject.exonerator.ExoneraTorDatabaseImporter" />
+            value="org.torproject.metrics.exonerator.ExoneraTorDatabaseImporter" />
   <property name="additional2sign" value="${warfile}" />
   <property name="tardepends" value="war" />
 
@@ -134,7 +134,7 @@
         <attribute name="Implementation-Version"
                    value="${release.version}-${git.revision}"/>
         <attribute name="Main-Class"
-                   value="org.torproject.exonerator.ServerMain" />
+                   value="org.torproject.metrics.exonerator.ServerMain" />
       </manifest>
     </war>
   </target>
@@ -161,7 +161,7 @@
         <attribute name="Implementation-Version"
                    value="${release.version}-${git.revision}"/>
         <attribute name="Main-Class"
-                   value="org.torproject.exonerator.ServerMain" />
+                   value="org.torproject.metrics.exonerator.ServerMain" />
       </manifest>
     </jar>
   </target>

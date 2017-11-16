@@ -1,7 +1,7 @@
 /* Copyright 2017 The Tor Project
  * See LICENSE for licensing information */
 
-package org.torproject.exonerator;
+package org.torproject.metrics.exonerator;
 
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.util.resource.Resource;

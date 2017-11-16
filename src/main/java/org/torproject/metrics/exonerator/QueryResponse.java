@@ -1,7 +1,7 @@
 /* Copyright 2017 The Tor Project
  * See LICENSE for licensing information */
 
-package org.torproject.exonerator;
+package org.torproject.metrics.exonerator;
 
 import com.google.gson.Gson;
 import com.google.gson.annotations.Expose;

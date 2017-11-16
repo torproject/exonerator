@@ -9,7 +9,7 @@
   <servlet>
     <servlet-name>ExoneraTor</servlet-name>
     <servlet-class>
-      org.torproject.exonerator.ExoneraTorServlet
+      org.torproject.metrics.exonerator.ExoneraTorServlet
     </servlet-class>
   </servlet>
   <servlet-mapping>
@@ -51,7 +51,7 @@
   <servlet>
     <servlet-name>Query</servlet-name>
     <servlet-class>
-      org.torproject.exonerator.QueryServlet
+      org.torproject.metrics.exonerator.QueryServlet
     </servlet-class>
   </servlet>
   <servlet-mapping>

@@ -1,7 +1,7 @@
 /* Copyright 2017 The Tor Project
  * See LICENSE for licensing information */
 
-package org.torproject.exonerator;
+package org.torproject.metrics.exonerator;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;

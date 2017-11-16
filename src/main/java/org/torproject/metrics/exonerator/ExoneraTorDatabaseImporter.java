@@ -1,7 +1,7 @@
 /* Copyright 2011--2017 The Tor Project
  * See LICENSE for licensing information */
 
-package org.torproject.exonerator;
+package org.torproject.metrics.exonerator;
 
 import org.torproject.descriptor.Descriptor;
 import org.torproject.descriptor.DescriptorCollector;

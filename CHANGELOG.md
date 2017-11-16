@@ -1,3 +1,11 @@
+# Changes in version 2.0.1 - 2017-11-??
+
+ * Minor changes
+   - Rename root package org.torproject.exonerator to
+     org.torproject.metrics.exonerator to make it part of the Tor
+     Metrics name space.
+
+
 # Changes in version 2.0.0 - 2017-11-14
 
  * Major changes
