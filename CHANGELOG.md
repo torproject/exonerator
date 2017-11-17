@@ -4,6 +4,8 @@
    - Rename root package org.torproject.exonerator to
      org.torproject.metrics.exonerator to make it part of the Tor
      Metrics name space.
+   - Sort results under technical details by timestamp and, if
+     necessary, by fingerprint.
 
 
 # Changes in version 2.0.0 - 2017-11-14
