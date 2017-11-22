@@ -1,4 +1,4 @@
-# Changes in version 2.0.1 - 2017-11-??
+# Changes in version 2.0.1 - 2017-11-22
 
  * Minor changes
    - Rename root package org.torproject.exonerator to
