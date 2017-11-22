@@ -62,45 +62,50 @@ public class QueryServlet extends HttpServlet {
   public void doGet(HttpServletRequest request,
       HttpServletResponse response) throws IOException,
       ServletException {
+    try {
+      /* Parse ip parameter. */
+      String ipParameter = request.getParameter("ip");
+      if (null == ipParameter) {
+        response.sendError(HttpServletResponse.SC_BAD_REQUEST,
+            "Missing ip parameter.");
+        return;
+      }
+      String relayIp = this.parseIpParameter(ipParameter);
+      if (null == relayIp) {
+        response.sendError(HttpServletResponse.SC_BAD_REQUEST,
+            "Invalid ip parameter.");
+        return;
+      }
 
-    /* Parse ip parameter. */
-    String ipParameter = request.getParameter("ip");
-    if (null == ipParameter) {
-      response.sendError(HttpServletResponse.SC_BAD_REQUEST,
-          "Missing ip parameter.");
-      return;
-    }
-    String relayIp = this.parseIpParameter(ipParameter);
-    if (null == relayIp) {
-      response.sendError(HttpServletResponse.SC_BAD_REQUEST,
-          "Invalid ip parameter.");
-      return;
-    }
+      /* Parse timestamp parameter. */
+      String timestampParameter = request.getParameter("timestamp");
+      if (null == timestampParameter) {
+        response.sendError(HttpServletResponse.SC_BAD_REQUEST,
+            "Missing timestamp parameter.");
+        return;
+      }
+      Long timestamp = this.parseTimestampParameter(timestampParameter);
+      if (null == timestamp) {
+        response.sendError(HttpServletResponse.SC_BAD_REQUEST,
+            "Invalid timestamp parameter.");
+        return;
+      }
 
-    /* Parse timestamp parameter. */
-    String timestampParameter = request.getParameter("timestamp");
-    if (null == timestampParameter) {
-      response.sendError(HttpServletResponse.SC_BAD_REQUEST,
-          "Missing timestamp parameter.");
-      return;
-    }
-    Long timestamp = this.parseTimestampParameter(timestampParameter);
-    if (null == timestamp) {
-      response.sendError(HttpServletResponse.SC_BAD_REQUEST,
-          "Invalid timestamp parameter.");
-      return;
-    }
-
-    /* Query the database. */
-    QueryResponse queryResponse = this.queryDatabase(relayIp, timestamp);
-    if (null == queryResponse) {
+      /* Query the database. */
+      QueryResponse queryResponse = this.queryDatabase(relayIp, timestamp);
+      if (null == queryResponse) {
+        response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+            "Database error.");
+      } else {
+        /* Write the response. */
+        response.setContentType("application/json");
+        response.setCharacterEncoding("utf-8");
+        response.getWriter().write(QueryResponse.toJson(queryResponse));
+      }
+    } catch (Throwable th) {
+      logger.error("Some problem in doGet.  Returning error.", th);
       response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-          "Database error.");
-    } else {
-      /* Write the response. */
-      response.setContentType("application/json");
-      response.setCharacterEncoding("utf-8");
-      response.getWriter().write(QueryResponse.toJson(queryResponse));
+          "General backend error.");
     }
   }
 

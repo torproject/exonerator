@@ -66,156 +66,164 @@ public class ExoneraTorServlet extends HttpServlet {
 
     /* Step 1: Parse the request. */
 
-    /* Parse ip parameter. */
-    String ipParameter = request.getParameter("ip");
-    String relayIp = parseIpParameter(ipParameter);
-    final boolean relayIpHasError = relayIp == null;
+    try {
+      /* Parse ip parameter. */
+      String ipParameter = request.getParameter("ip");
+      String relayIp = parseIpParameter(ipParameter);
+      final boolean relayIpHasError = relayIp == null;
 
-    /* Parse timestamp parameter. */
-    String timestampParameter = request.getParameter("timestamp");
-    String timestampStr = parseTimestampParameter(timestampParameter);
-    final boolean timestampHasError = timestampStr == null;
+      /* Parse timestamp parameter. */
+      String timestampParameter = request.getParameter("timestamp");
+      String timestampStr = parseTimestampParameter(timestampParameter);
+      final boolean timestampHasError = timestampStr == null;
 
-    /* Parse lang parameter. */
-    String langParameter = request.getParameter("lang");
-    String langStr = "en";
-    if (null != langParameter
-        && this.availableLanguages.contains(langParameter)) {
-      langStr = langParameter;
-    }
+      /* Parse lang parameter. */
+      String langParameter = request.getParameter("lang");
+      String langStr = "en";
+      if (null != langParameter
+          && this.availableLanguages.contains(langParameter)) {
+        langStr = langParameter;
+      }
 
-    /* Step 2: Query the backend server. */
+      /* Step 2: Query the backend server. */
 
-    boolean successfullyConnectedToBackend = false;
-    String firstDate = null;
-    String lastDate = null;
-    boolean noRelevantConsensuses = true;
-    List<String[]> statusEntries = new ArrayList<>();
-    List<String> addressesInSameNetwork = null;
+      boolean successfullyConnectedToBackend = false;
+      String firstDate = null;
+      String lastDate = null;
+      boolean noRelevantConsensuses = true;
+      List<String[]> statusEntries = new ArrayList<>();
+      List<String> addressesInSameNetwork = null;
 
-    /* Only query, if we received valid user input. */
-    if (null != relayIp && !relayIp.isEmpty() && null != timestampStr
-        && !timestampStr.isEmpty()) {
-      QueryResponse queryResponse = this.queryBackend(relayIp, timestampStr);
-      if (null != queryResponse) {
-        successfullyConnectedToBackend = true;
-        firstDate = queryResponse.firstDateInDatabase;
-        lastDate = queryResponse.lastDateInDatabase;
-        if (null != queryResponse.relevantStatuses
-            && queryResponse.relevantStatuses) {
-          noRelevantConsensuses = false;
-        }
-        if (null != queryResponse.matches) {
-          for (QueryResponse.Match match : queryResponse.matches) {
-            StringBuilder sb = new StringBuilder();
-            int writtenAddresses = 0;
-            for (String address : match.addresses) {
-              sb.append((writtenAddresses++ > 0 ? ", " : "") + address);
+      /* Only query, if we received valid user input. */
+      if (null != relayIp && !relayIp.isEmpty() && null != timestampStr
+          && !timestampStr.isEmpty()) {
+        QueryResponse queryResponse = this.queryBackend(relayIp, timestampStr);
+        if (null != queryResponse) {
+          successfullyConnectedToBackend = true;
+          firstDate = queryResponse.firstDateInDatabase;
+          lastDate = queryResponse.lastDateInDatabase;
+          if (null != queryResponse.relevantStatuses
+              && queryResponse.relevantStatuses) {
+            noRelevantConsensuses = false;
+          }
+          if (null != queryResponse.matches) {
+            for (QueryResponse.Match match : queryResponse.matches) {
+              StringBuilder sb = new StringBuilder();
+              int writtenAddresses = 0;
+              for (String address : match.addresses) {
+                sb.append((writtenAddresses++ > 0 ? ", " : "") + address);
+              }
+              String[] statusEntry = new String[]{match.timestamp,
+                  sb.toString(), match.fingerprint, match.nickname,
+                  null == match.exit ? "U" : (match.exit ? "Y" : "N")};
+              statusEntries.add(statusEntry);
             }
-            String[] statusEntry = new String[]{match.timestamp,
-                sb.toString(), match.fingerprint, match.nickname,
-                null == match.exit ? "U" : (match.exit ? "Y" : "N")};
-            statusEntries.add(statusEntry);
+          }
+          if (null != queryResponse.nearbyAddresses) {
+            addressesInSameNetwork
+                = Arrays.asList(queryResponse.nearbyAddresses);
           }
         }
-        if (null != queryResponse.nearbyAddresses) {
-          addressesInSameNetwork = Arrays.asList(queryResponse.nearbyAddresses);
-        }
       }
-    }
 
-    /* Step 3: Write the response. */
+      /* Step 3: Write the response. */
 
-    /* Set content type, or the page doesn't render in Chrome. */
-    response.setContentType("text/html");
-    response.setCharacterEncoding("utf-8");
+      /* Set content type, or the page doesn't render in Chrome. */
+      response.setContentType("text/html");
+      response.setCharacterEncoding("utf-8");
 
-    /* Find the right resource bundle for the user's requested language. */
-    ResourceBundle rb = ResourceBundle.getBundle("ExoneraTor",
-        Locale.forLanguageTag(langStr));
+      /* Find the right resource bundle for the user's requested language. */
+      ResourceBundle rb = ResourceBundle.getBundle("ExoneraTor",
+          Locale.forLanguageTag(langStr));
 
-    /* Start writing response. */
-    StringWriter so = new StringWriter();
-    PrintWriter out = new PrintWriter(so);
-    this.writeHeader(out, rb, langStr);
+      /* Start writing response. */
+      StringWriter so = new StringWriter();
+      PrintWriter out = new PrintWriter(so);
+      this.writeHeader(out, rb, langStr);
 
-    /* Write form. */
-    boolean timestampOutOfRange = null != timestampStr
-        && (null != firstDate && timestampStr.compareTo(firstDate) < 0
-        || (null != lastDate && timestampStr.compareTo(lastDate) > 0));
-    this.writeForm(out, rb, relayIp, relayIpHasError
-        || ("".equals(relayIp) && !"".equals(timestampStr)), timestampStr,
-        !relayIpHasError
-        && !("".equals(relayIp) && !"".equals(timestampStr))
-        && (timestampHasError || timestampOutOfRange
-        || (!"".equals(relayIp) && "".equals(timestampStr))), langStr);
+      /* Write form. */
+      boolean timestampOutOfRange = null != timestampStr
+          && (null != firstDate && timestampStr.compareTo(firstDate) < 0
+          || (null != lastDate && timestampStr.compareTo(lastDate) > 0));
+      this.writeForm(out, rb, relayIp, relayIpHasError
+          || ("".equals(relayIp) && !"".equals(timestampStr)), timestampStr,
+          !relayIpHasError
+          && !("".equals(relayIp) && !"".equals(timestampStr))
+          && (timestampHasError || timestampOutOfRange
+          || (!"".equals(relayIp) && "".equals(timestampStr))), langStr);
 
-    /* If both parameters are empty, don't print any summary and exit.
-     * This is the start page. */
-    if ("".equals(relayIp) && "".equals(timestampStr)) {
-      this.writeFooter(out, rb, null, null);
+      /* If both parameters are empty, don't print any summary and exit.
+       * This is the start page. */
+      if ("".equals(relayIp) && "".equals(timestampStr)) {
+        this.writeFooter(out, rb, null, null);
 
-    /* If only one parameter is empty and the other is not, print summary with
-     * warning message and exit. */
-    } else if ("".equals(relayIp)) {
-      this.writeSummaryNoIp(out, rb);
-      this.writeFooter(out, rb, null, null);
-    } else if ("".equals(timestampStr)) {
-      this.writeSummaryNoTimestamp(out, rb);
-      this.writeFooter(out, rb, null, null);
+        /* If only one parameter is empty and the other is not, print summary
+         * with warning message and exit. */
+      } else if ("".equals(relayIp)) {
+        this.writeSummaryNoIp(out, rb);
+        this.writeFooter(out, rb, null, null);
+      } else if ("".equals(timestampStr)) {
+        this.writeSummaryNoTimestamp(out, rb);
+        this.writeFooter(out, rb, null, null);
 
-    /* If there's an issue with parsing either of the parameters, print summary
-     * with error message and exit. */
-    } else if (relayIpHasError) {
-      this.writeSummaryInvalidIp(out, rb, ipParameter);
-      this.writeFooter(out, rb, null, null);
-    } else if (timestampHasError) {
-      this.writeSummaryInvalidTimestamp(out, rb, timestampParameter);
-      this.writeFooter(out, rb, null, null);
+        /* If there's an issue with parsing either of the parameters, print
+         * summary with error message and exit. */
+      } else if (relayIpHasError) {
+        this.writeSummaryInvalidIp(out, rb, ipParameter);
+        this.writeFooter(out, rb, null, null);
+      } else if (timestampHasError) {
+        this.writeSummaryInvalidTimestamp(out, rb, timestampParameter);
+        this.writeFooter(out, rb, null, null);
 
-    /* If we were unable to connect to the database, write an error message. */
-    } else if (!successfullyConnectedToBackend) {
-      this.writeSummaryUnableToConnectToBackend(out, rb);
-      this.writeFooter(out, rb, null, null);
+        /* If we were unable to connect to the database,
+         * write an error message. */
+      } else if (!successfullyConnectedToBackend) {
+        this.writeSummaryUnableToConnectToBackend(out, rb);
+        this.writeFooter(out, rb, null, null);
 
-    /* Similarly, if we found the database to be empty, write an error message,
-     * too. */
-    } else if (null == firstDate || null == lastDate) {
-      this.writeSummaryNoData(out, rb);
-      this.writeFooter(out, rb, null, null);
+        /* Similarly, if we found the database to be empty,
+         * write an error message, too. */
+      } else if (null == firstDate || null == lastDate) {
+        this.writeSummaryNoData(out, rb);
+        this.writeFooter(out, rb, null, null);
 
-    /* If the requested date is out of range, tell the user. */
-    } else if (timestampOutOfRange) {
-      this.writeSummaryTimestampOutsideRange(out, rb, timestampStr,
-          firstDate, lastDate);
-      this.writeFooter(out, rb, relayIp, timestampStr);
+        /* If the requested date is out of range, tell the user. */
+      } else if (timestampOutOfRange) {
+        this.writeSummaryTimestampOutsideRange(out, rb, timestampStr,
+            firstDate, lastDate);
+        this.writeFooter(out, rb, relayIp, timestampStr);
 
-    } else if (noRelevantConsensuses) {
-      this.writeSummaryNoDataForThisInterval(out, rb);
-      this.writeFooter(out, rb, relayIp, timestampStr);
+      } else if (noRelevantConsensuses) {
+        this.writeSummaryNoDataForThisInterval(out, rb);
+        this.writeFooter(out, rb, relayIp, timestampStr);
 
-    /* Print out result. */
-    } else {
-      if (!statusEntries.isEmpty()) {
-        this.writeSummaryPositive(out, rb, relayIp, timestampStr);
-        this.writeTechnicalDetails(out, rb, relayIp, timestampStr,
-            statusEntries);
-      } else if (addressesInSameNetwork != null
-          && !addressesInSameNetwork.isEmpty()) {
-        this.writeSummaryAddressesInSameNetwork(out, rb, relayIp,
-            timestampStr, langStr, addressesInSameNetwork);
+        /* Print out result. */
       } else {
-        this.writeSummaryNegative(out, rb, relayIp, timestampStr);
+        if (!statusEntries.isEmpty()) {
+          this.writeSummaryPositive(out, rb, relayIp, timestampStr);
+          this.writeTechnicalDetails(out, rb, relayIp, timestampStr,
+              statusEntries);
+        } else if (addressesInSameNetwork != null
+            && !addressesInSameNetwork.isEmpty()) {
+          this.writeSummaryAddressesInSameNetwork(out, rb, relayIp,
+              timestampStr, langStr, addressesInSameNetwork);
+        } else {
+          this.writeSummaryNegative(out, rb, relayIp, timestampStr);
+        }
+        this.writePermanentLink(out, rb, relayIp, timestampStr, langStr);
+        this.writeFooter(out, rb, relayIp, timestampStr);
       }
-      this.writePermanentLink(out, rb, relayIp, timestampStr, langStr);
-      this.writeFooter(out, rb, relayIp, timestampStr);
-    }
 
-    /* Forward to the JSP that adds header and footer. */
-    request.setAttribute("lang", langStr);
-    request.setAttribute("body", so.toString());
-    request.getRequestDispatcher("WEB-INF/index.jsp").forward(request,
-        response);
+      /* Forward to the JSP that adds header and footer. */
+      request.setAttribute("lang", langStr);
+      request.setAttribute("body", so.toString());
+      request.getRequestDispatcher("WEB-INF/index.jsp").forward(request,
+          response);
+    } catch (Throwable th) {
+      logger.error("Some problem in doGet.  Returning error.", th);
+      response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+          "General error.");
+    }
   }
 
   /* Helper methods for handling the request. */
@@ -310,6 +318,8 @@ public class ExoneraTorServlet extends HttpServlet {
       /* No result from backend, so that we don't have a query response to
        * process further. */
       logger.error("Backend query failed.", e);
+    } catch (Throwable th) {
+      logger.error("Backend query failed with general error.", th);
     }
     return null;
   }
