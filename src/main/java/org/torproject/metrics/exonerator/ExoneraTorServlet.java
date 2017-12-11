@@ -175,7 +175,7 @@ public class ExoneraTorServlet extends HttpServlet {
         /* If the timestamp is too recent, print summary with error message and
          * exit. */
       } else if (requestedDate.tooRecent) {
-        this.writeSummaryTimestampTooRecent(out, rb, requestedDate.asString);
+        this.writeSummaryTimestampTooRecent(out, rb);
         this.writeFooter(out, rb, null, null);
 
         /* If we were unable to connect to the database,
@@ -442,11 +442,10 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writeSummaryTimestampTooRecent(PrintWriter out,
-      ResourceBundle rb, String timestampStr) throws IOException {
+      ResourceBundle rb) throws IOException {
     this.writeSummary(out, rb.getString("summary.heading"), "panel-danger",
         rb.getString("summary.invalidparams.timestamptoorecent.title"),
-        null, rb.getString("summary.invalidparams.timestamptoorecent.body"),
-        timestampStr);
+        null, rb.getString("summary.invalidparams.timestamptoorecent.body"));
   }
 
   private void writeSummaryNoDataForThisInterval(PrintWriter out,
