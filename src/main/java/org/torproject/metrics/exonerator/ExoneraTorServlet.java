@@ -15,6 +15,8 @@ import java.io.StringWriter;
 import java.net.URL;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -76,6 +78,8 @@ public class ExoneraTorServlet extends HttpServlet {
       String timestampParameter = request.getParameter("timestamp");
       String timestampStr = parseTimestampParameter(timestampParameter);
       final boolean timestampHasError = timestampStr == null;
+      final boolean timestampTooRecent = !timestampHasError
+          && checkTimestampTooRecent(timestampStr);
 
       /* Parse lang parameter. */
       String langParameter = request.getParameter("lang");
@@ -96,7 +100,7 @@ public class ExoneraTorServlet extends HttpServlet {
 
       /* Only query, if we received valid user input. */
       if (null != relayIp && !relayIp.isEmpty() && null != timestampStr
-          && !timestampStr.isEmpty()) {
+          && !timestampStr.isEmpty() && !timestampTooRecent) {
         QueryResponse queryResponse = this.queryBackend(relayIp, timestampStr);
         if (null != queryResponse) {
           successfullyConnectedToBackend = true;
@@ -173,6 +177,12 @@ public class ExoneraTorServlet extends HttpServlet {
         this.writeFooter(out, rb, null, null);
       } else if (timestampHasError) {
         this.writeSummaryInvalidTimestamp(out, rb, timestampParameter);
+        this.writeFooter(out, rb, null, null);
+
+        /* If the timestamp is too recent, print summary with error message and
+         * exit. */
+      } else if (timestampTooRecent) {
+        this.writeSummaryTimestampTooRecent(out, rb, timestampStr);
         this.writeFooter(out, rb, null, null);
 
         /* If we were unable to connect to the database,
@@ -305,6 +315,14 @@ public class ExoneraTorServlet extends HttpServlet {
       }
     }
     return timestampStr;
+  }
+
+  /** Return whether the timestamp parameter is too recent, which is the case if
+   * it matches the day before the current system date (in UTC) or is even
+   * younger. */
+  static boolean checkTimestampTooRecent(String timestampParameter) {
+    return timestampParameter.compareTo(ZonedDateTime.now(ZoneOffset.UTC)
+        .toLocalDate().minusDays(1).toString()) >= 0;
   }
 
   /* Helper method for fetching a query response via URL. */
@@ -456,6 +474,14 @@ public class ExoneraTorServlet extends HttpServlet {
         rb.getString("summary.invalidparams.invalidtimestamp.title"),
         null, rb.getString("summary.invalidparams.invalidtimestamp.body"),
         escapedTimestampParameter, "\"YYYY-MM-DD\"");
+  }
+
+  private void writeSummaryTimestampTooRecent(PrintWriter out,
+      ResourceBundle rb, String timestampStr) throws IOException {
+    this.writeSummary(out, rb.getString("summary.heading"), "panel-danger",
+        rb.getString("summary.invalidparams.timestamptoorecent.title"),
+        null, rb.getString("summary.invalidparams.timestamptoorecent.body"),
+        timestampStr);
   }
 
   private void writeSummaryNoDataForThisInterval(PrintWriter out,

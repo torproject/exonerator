@@ -16,6 +16,8 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
@@ -88,6 +90,11 @@ public class QueryServlet extends HttpServlet {
       if (null == timestamp) {
         response.sendError(HttpServletResponse.SC_BAD_REQUEST,
             "Invalid timestamp parameter.");
+        return;
+      }
+      if (this.checkTimestampTooRecent(timestampParameter)) {
+        response.sendError(HttpServletResponse.SC_BAD_REQUEST,
+            "Timestamp too recent.");
         return;
       }
 
@@ -226,6 +233,15 @@ public class QueryServlet extends HttpServlet {
       }
     }
     return timestamp;
+  }
+
+
+  /** Return whether the timestamp parameter is too recent, which is the case if
+   * it matches the day before the current system date (in UTC) or is even
+   * younger. */
+  private boolean checkTimestampTooRecent(String timestampParameter) {
+    return timestampParameter.compareTo(ZonedDateTime.now(ZoneOffset.UTC)
+        .toLocalDate().minusDays(1).toString()) >= 0;
   }
 
   /* Helper methods for querying the database. */
