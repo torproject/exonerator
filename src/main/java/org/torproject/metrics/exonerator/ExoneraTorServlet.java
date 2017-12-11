@@ -3,6 +3,8 @@
 
 package org.torproject.metrics.exonerator;
 
+import static java.time.format.DateTimeFormatter.ISO_LOCAL_DATE;
+
 import org.apache.commons.lang3.StringEscapeUtils;
 
 import org.slf4j.Logger;
@@ -15,8 +17,8 @@ import java.io.StringWriter;
 import java.net.URL;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -321,8 +323,8 @@ public class ExoneraTorServlet extends HttpServlet {
    * it matches the day before the current system date (in UTC) or is even
    * younger. */
   static boolean checkTimestampTooRecent(String timestampParameter) {
-    return timestampParameter.compareTo(ZonedDateTime.now(ZoneOffset.UTC)
-        .toLocalDate().minusDays(1).toString()) >= 0;
+    return LocalDate.parse(timestampParameter, ISO_LOCAL_DATE)
+        .isAfter(LocalDate.now(ZoneOffset.UTC).minusDays(2));
   }
 
   /* Helper method for fetching a query response via URL. */
