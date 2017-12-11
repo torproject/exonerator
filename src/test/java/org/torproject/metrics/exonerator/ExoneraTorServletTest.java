@@ -32,34 +32,5 @@ public class ExoneraTorServletTest {
       assertEquals(data[1], ExoneraTorServlet.parseIpParameter(data[0]));
     }
   }
-
-  private static final String[][] timestampTestData
-      = {   // input, output
-        {"2000-   10-10", "2000-10-10"},
-        {"2010-12-16 +0001", "2010-12-16"},
-        {"2010-12-16 CEST", "2010-12-16"},
-        {"2010-12-16abcd", "2010-12-16"},
-        {"2010-12-16", "2010-12-16"},
-        {"2000-10-10 12:10:00", "2000-10-10"},
-        {"2000-10-10 1210-04-05", "2000-10-10"},
-        {"20.10.16", null},
-        {null, ""},
-        {"", ""},
-        {"2010-12 16", null},
-        {"2010-\t12-\t16", "2010-12-16"},
-        {"2010- 12- \t16", "2010-12-16"},
-        {"2003-12-\t16", "2003-12-16"},
-        {"2004-10-10\t", "2004-10-10"},
-        {"\n2005-10-10\t\t", "2005-10-10"},
-        {"    2001-10-10   ", "2001-10-10"}
-      };
-
-  @Test
-  public void testTimestampParsing() {
-    for (String[] data : timestampTestData) {
-      assertEquals(data[1], ExoneraTorServlet.parseTimestampParameter(data[0]));
-    }
-  }
-
 }
 

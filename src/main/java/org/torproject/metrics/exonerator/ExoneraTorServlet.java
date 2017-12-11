@@ -3,8 +3,6 @@
 
 package org.torproject.metrics.exonerator;
 
-import static java.time.format.DateTimeFormatter.ISO_LOCAL_DATE;
-
 import org.apache.commons.lang3.StringEscapeUtils;
 
 import org.slf4j.Logger;
@@ -15,10 +13,6 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.URL;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -26,7 +20,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.ResourceBundle;
 import java.util.SortedMap;
-import java.util.TimeZone;
 import java.util.TreeMap;
 import java.util.regex.Pattern;
 
@@ -77,11 +70,8 @@ public class ExoneraTorServlet extends HttpServlet {
       final boolean relayIpHasError = relayIp == null;
 
       /* Parse timestamp parameter. */
-      String timestampParameter = request.getParameter("timestamp");
-      String timestampStr = parseTimestampParameter(timestampParameter);
-      final boolean timestampHasError = timestampStr == null;
-      final boolean timestampTooRecent = !timestampHasError
-          && checkTimestampTooRecent(timestampStr);
+      ExoneraTorDate requestedDate
+          = new ExoneraTorDate(request.getParameter("timestamp"));
 
       /* Parse lang parameter. */
       String langParameter = request.getParameter("lang");
@@ -94,20 +84,21 @@ public class ExoneraTorServlet extends HttpServlet {
       /* Step 2: Query the backend server. */
 
       boolean successfullyConnectedToBackend = false;
-      String firstDate = null;
-      String lastDate = null;
+      ExoneraTorDate firstDate = ExoneraTorDate.INVALID;
+      ExoneraTorDate lastDate = ExoneraTorDate.INVALID;
       boolean noRelevantConsensuses = true;
       List<String[]> statusEntries = new ArrayList<>();
       List<String> addressesInSameNetwork = null;
 
       /* Only query, if we received valid user input. */
-      if (null != relayIp && !relayIp.isEmpty() && null != timestampStr
-          && !timestampStr.isEmpty() && !timestampTooRecent) {
-        QueryResponse queryResponse = this.queryBackend(relayIp, timestampStr);
+      if (null != relayIp && !relayIp.isEmpty()
+          && requestedDate.valid && !requestedDate.tooRecent) {
+        QueryResponse queryResponse
+            = this.queryBackend(relayIp, requestedDate.asString);
         if (null != queryResponse) {
           successfullyConnectedToBackend = true;
-          firstDate = queryResponse.firstDateInDatabase;
-          lastDate = queryResponse.lastDateInDatabase;
+          firstDate = new ExoneraTorDate(queryResponse.firstDateInDatabase);
+          lastDate = new ExoneraTorDate(queryResponse.lastDateInDatabase);
           if (null != queryResponse.relevantStatuses
               && queryResponse.relevantStatuses) {
             noRelevantConsensuses = false;
@@ -148,19 +139,19 @@ public class ExoneraTorServlet extends HttpServlet {
       this.writeHeader(out, rb, langStr);
 
       /* Write form. */
-      boolean timestampOutOfRange = null != timestampStr
-          && (null != firstDate && timestampStr.compareTo(firstDate) < 0
-          || (null != lastDate && timestampStr.compareTo(lastDate) > 0));
+      boolean timestampOutOfRange = requestedDate.valid
+          && (firstDate.valid && requestedDate.date.isBefore(firstDate.date)
+          || (lastDate.valid && requestedDate.date.isAfter(lastDate.date)));
       this.writeForm(out, rb, relayIp, relayIpHasError
-          || ("".equals(relayIp) && !"".equals(timestampStr)), timestampStr,
-          !relayIpHasError
-          && !("".equals(relayIp) && !"".equals(timestampStr))
-          && (timestampHasError || timestampOutOfRange
-          || (!"".equals(relayIp) && "".equals(timestampStr))), langStr);
+          || ("".equals(relayIp) && !requestedDate.empty),
+          requestedDate.asString, !relayIpHasError
+          && !("".equals(relayIp) && !requestedDate.valid)
+          && (!requestedDate.valid || timestampOutOfRange
+          || (!"".equals(relayIp) && requestedDate.empty)), langStr);
 
       /* If both parameters are empty, don't print any summary and exit.
        * This is the start page. */
-      if ("".equals(relayIp) && "".equals(timestampStr)) {
+      if ("".equals(relayIp) && requestedDate.empty) {
         this.writeFooter(out, rb, null, null);
 
         /* If only one parameter is empty and the other is not, print summary
@@ -168,7 +159,7 @@ public class ExoneraTorServlet extends HttpServlet {
       } else if ("".equals(relayIp)) {
         this.writeSummaryNoIp(out, rb);
         this.writeFooter(out, rb, null, null);
-      } else if ("".equals(timestampStr)) {
+      } else if (requestedDate.empty) {
         this.writeSummaryNoTimestamp(out, rb);
         this.writeFooter(out, rb, null, null);
 
@@ -177,14 +168,14 @@ public class ExoneraTorServlet extends HttpServlet {
       } else if (relayIpHasError) {
         this.writeSummaryInvalidIp(out, rb, ipParameter);
         this.writeFooter(out, rb, null, null);
-      } else if (timestampHasError) {
-        this.writeSummaryInvalidTimestamp(out, rb, timestampParameter);
+      } else if (!requestedDate.valid) {
+        this.writeSummaryInvalidTimestamp(out, rb, requestedDate.asRequested);
         this.writeFooter(out, rb, null, null);
 
         /* If the timestamp is too recent, print summary with error message and
          * exit. */
-      } else if (timestampTooRecent) {
-        this.writeSummaryTimestampTooRecent(out, rb, timestampStr);
+      } else if (requestedDate.tooRecent) {
+        this.writeSummaryTimestampTooRecent(out, rb, requestedDate.asString);
         this.writeFooter(out, rb, null, null);
 
         /* If we were unable to connect to the database,
@@ -195,35 +186,36 @@ public class ExoneraTorServlet extends HttpServlet {
 
         /* Similarly, if we found the database to be empty,
          * write an error message, too. */
-      } else if (null == firstDate || null == lastDate) {
+      } else if (firstDate.empty || lastDate.empty) {
         this.writeSummaryNoData(out, rb);
         this.writeFooter(out, rb, null, null);
 
         /* If the requested date is out of range, tell the user. */
       } else if (timestampOutOfRange) {
-        this.writeSummaryTimestampOutsideRange(out, rb, timestampStr,
-            firstDate, lastDate);
-        this.writeFooter(out, rb, relayIp, timestampStr);
+        this.writeSummaryTimestampOutsideRange(out, rb, requestedDate.asString,
+            firstDate.asString, lastDate.asString);
+        this.writeFooter(out, rb, relayIp, requestedDate.asString);
 
       } else if (noRelevantConsensuses) {
         this.writeSummaryNoDataForThisInterval(out, rb);
-        this.writeFooter(out, rb, relayIp, timestampStr);
+        this.writeFooter(out, rb, relayIp, requestedDate.asString);
 
         /* Print out result. */
       } else {
         if (!statusEntries.isEmpty()) {
-          this.writeSummaryPositive(out, rb, relayIp, timestampStr);
-          this.writeTechnicalDetails(out, rb, relayIp, timestampStr,
+          this.writeSummaryPositive(out, rb, relayIp, requestedDate.asString);
+          this.writeTechnicalDetails(out, rb, relayIp, requestedDate.asString,
               statusEntries);
         } else if (addressesInSameNetwork != null
             && !addressesInSameNetwork.isEmpty()) {
           this.writeSummaryAddressesInSameNetwork(out, rb, relayIp,
-              timestampStr, langStr, addressesInSameNetwork);
+              requestedDate.asString, langStr, addressesInSameNetwork);
         } else {
-          this.writeSummaryNegative(out, rb, relayIp, timestampStr);
+          this.writeSummaryNegative(out, rb, relayIp, requestedDate.asString);
         }
-        this.writePermanentLink(out, rb, relayIp, timestampStr, langStr);
-        this.writeFooter(out, rb, relayIp, timestampStr);
+        this.writePermanentLink(out, rb, relayIp, requestedDate.asString,
+            langStr);
+        this.writeFooter(out, rb, relayIp, requestedDate.asString);
       }
 
       /* Forward to the JSP that adds header and footer. */
@@ -296,35 +288,6 @@ public class ExoneraTorServlet extends HttpServlet {
       relayIp = "";
     }
     return relayIp;
-  }
-
-  /** Parse a timestamp parameter and return either a non-<code>null</code>
-   * value in case the parameter was valid or empty, or <code>null</code> if it
-   * was non-empty and invalid. */
-  static String parseTimestampParameter(String passedTimestampParameter) {
-    String timestampStr = "";
-    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-    dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-    dateFormat.setLenient(false);
-    if (passedTimestampParameter != null
-        && passedTimestampParameter.length() > 0) {
-      String timestampParameter = passedTimestampParameter.trim();
-      try {
-        long timestamp = dateFormat.parse(timestampParameter).getTime();
-        timestampStr = dateFormat.format(timestamp);
-      } catch (ParseException e) {
-        timestampStr = null;
-      }
-    }
-    return timestampStr;
-  }
-
-  /** Return whether the timestamp parameter is too recent, which is the case if
-   * it matches the day before the current system date (in UTC) or is even
-   * younger. */
-  static boolean checkTimestampTooRecent(String timestampParameter) {
-    return LocalDate.parse(timestampParameter, ISO_LOCAL_DATE)
-        .isAfter(LocalDate.now(ZoneOffset.UTC).minusDays(2));
   }
 
   /* Helper method for fetching a query response via URL. */
@@ -698,4 +661,3 @@ public class ExoneraTorServlet extends HttpServlet {
     out.close();
   }
 }
-
