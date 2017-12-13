@@ -3,6 +3,8 @@
 
 package org.torproject.metrics.exonerator;
 
+import static java.time.format.DateTimeFormatter.ISO_LOCAL_DATE;
+
 import org.apache.commons.lang3.StringEscapeUtils;
 
 import org.slf4j.Logger;
@@ -13,6 +15,7 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.URL;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -192,8 +195,10 @@ public class ExoneraTorServlet extends HttpServlet {
 
         /* If the requested date is out of range, tell the user. */
       } else if (timestampOutOfRange) {
+        LocalDate dayBeforeYesterday = LocalDate.now().minusDays(2);
         this.writeSummaryTimestampOutsideRange(out, rb, requestedDate.asString,
-            firstDate.asString, lastDate.asString);
+            firstDate.asString, lastDate.date.isBefore(dayBeforeYesterday)
+            ? lastDate.asString : dayBeforeYesterday.format(ISO_LOCAL_DATE));
         this.writeFooter(out, rb, relayIp, requestedDate.asString);
 
       } else if (noRelevantConsensuses) {
