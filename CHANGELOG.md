@@ -1,3 +1,15 @@
+# Changes in version 2.0.2 - 2017-12-20
+
+ * Major changes
+   - Reject queries for the current day or the day before, because the
+     database may not yet contain enough data to correctly answer
+     those requests.
+
+ * Minor changes
+   - Add catch-all clauses to servlets to catch and log any unforeseen
+     errors.
+
+
 # Changes in version 2.0.1 - 2017-11-22
 
  * Minor changes
