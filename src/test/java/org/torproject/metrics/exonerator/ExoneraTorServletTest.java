@@ -4,8 +4,16 @@
 package org.torproject.metrics.exonerator;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
+
+import java.io.PrintWriter;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.util.Arrays;
+import java.util.Locale;
+import java.util.ResourceBundle;
 
 public class ExoneraTorServletTest {
 
@@ -32,5 +40,55 @@ public class ExoneraTorServletTest {
       assertEquals(data[1], ExoneraTorServlet.parseIpParameter(data[0]));
     }
   }
+
+  @Test
+  public void testNearbyIpV6Response() throws Exception {
+    ExoneraTorServlet es = new ExoneraTorServlet();
+    ResourceBundle rb = ResourceBundle
+        .getBundle("ExoneraTor", Locale.forLanguageTag("en"));
+    for (QueryResponse qr : qrs) {
+      StringWriter sw = new StringWriter();
+      es.writeSummaryAddressesInSameNetwork(new PrintWriter(sw), rb,
+          qr.queryAddress, qr.queryDate, "en",
+          Arrays.asList(qr.nearbyAddresses));
+      String errorMsg = "Test data:" + QueryResponse.toJson(qr)
+          + "\nresult:\n" + sw.toString();
+      assertTrue(errorMsg,
+          sw.toString().contains("Result is negative"));
+      assertTrue(errorMsg,
+          sw.toString().contains("ip=[2a06%3Ae80%3A1%3A%3A10]&"));
+      assertTrue(errorMsg,
+          sw.toString().contains("ip=[2a06%3Ae80%3A1%3A%3A15]&"));
+    }
+  }
+
+  private QueryResponse[] qrs = new QueryResponse[]{
+      QueryResponse.fromJson(new StringReader(
+          "{\"version\":\"1.0\","
+          + "\"query_address\":\"2a06:e80:1::11\","
+          + "\"query_date\":\"2016-12-12\","
+          + "\"first_date_in_database\":\"2016-01-01\","
+          + "\"last_date_in_database\":\"2016-12-31\","
+          + "\"relevant_statuses\":false,"
+          + "\"nearby_addresses\":[\"2a06:e80:1::10\","
+          + "\"2a06:e80:1::15\"]}")),
+      QueryResponse.fromJson(new StringReader(
+          "{\"version\":\"1.0\","
+          + "\"query_address\":\"2a06:e80:1::11\","
+          + "\"query_date\":\"2016-12-12\","
+          + "\"first_date_in_database\":\"2016-01-01\","
+          + "\"last_date_in_database\":\"2016-12-31\","
+          + "\"relevant_statuses\":false,"
+          + "\"nearby_addresses\":[\"[2a06:e80:1::10]\","
+          + "\"2a06:e80:1::15\"]}")),
+      QueryResponse.fromJson(new StringReader(
+          "{\"version\":\"1.0\","
+          + "\"query_address\":\"2a06:e80:1::11\","
+          + "\"query_date\":\"2016-12-12\","
+          + "\"first_date_in_database\":\"2016-01-01\","
+          + "\"last_date_in_database\":\"2016-12-31\","
+          + "\"relevant_statuses\":false,"
+          + "\"nearby_addresses\":[\"[2a06:e80:1::10]\","
+          + "\"[2a06:e80:1::15]\"]}"))};
 }
 

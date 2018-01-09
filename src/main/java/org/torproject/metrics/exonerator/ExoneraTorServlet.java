@@ -466,7 +466,7 @@ public class ExoneraTorServlet extends HttpServlet {
         contactLink);
   }
 
-  private void writeSummaryAddressesInSameNetwork(PrintWriter out,
+  void writeSummaryAddressesInSameNetwork(PrintWriter out,
       ResourceBundle rb, String relayIp, String timestampStr, String langStr,
       List<String> addressesInSameNetwork) throws IOException {
     Object[][] panelItems = new Object[addressesInSameNetwork.size()][];
@@ -475,10 +475,10 @@ public class ExoneraTorServlet extends HttpServlet {
       String link;
       String address;
       if (addressInSameNetwork.contains(":")) {
+        address = addressInSameNetwork.replaceAll("[\\[\\]]", "");
         link = String.format("/?ip=[%s]&timestamp=%s&lang=%s",
-            addressInSameNetwork.replaceAll(":", "%3A"), timestampStr,
-            langStr);
-        address = "[" + addressInSameNetwork + "]";
+            address.replaceAll(":", "%3A"), timestampStr, langStr);
+        address = "[" + address + "]";
       } else {
         link = String.format("/?ip=%s&timestamp=%s&lang=%s",
             addressInSameNetwork, timestampStr, langStr);
