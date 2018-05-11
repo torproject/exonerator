@@ -1,3 +1,9 @@
+# Changes in version 2.0.3 - 2018-0?-??
+
+ * Minor changes
+   - Remove duplicate [] surrounding suggested IPv6 addresses.
+
+
 # Changes in version 2.0.2 - 2017-12-20
 
  * Major changes
