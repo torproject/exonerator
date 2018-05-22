@@ -11,6 +11,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+import java.io.IOException;
 import java.io.StringReader;
 import java.util.Arrays;
 import java.util.Collection;
@@ -103,7 +104,7 @@ public class QueryResponseTest {
   }
 
   @Test
-  public void testJsonReading() {
+  public void testJsonReading() throws IOException {
     if (null == this.queryResponse) {
       assertNull(QueryResponse.fromJson(new StringReader(this.json)));
     } else {
@@ -113,7 +114,7 @@ public class QueryResponseTest {
   }
 
   @Test
-  public void testJsonWriting() {
+  public void testJsonWriting() throws IOException {
     if (null == this.queryResponse) {
       return;
     }

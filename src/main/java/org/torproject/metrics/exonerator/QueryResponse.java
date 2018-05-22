@@ -3,68 +3,60 @@
 
 package org.torproject.metrics.exonerator;
 
-import com.google.gson.Gson;
-import com.google.gson.annotations.Expose;
-import com.google.gson.annotations.SerializedName;
-
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.io.Reader;
 
 /** Query response from the ExoneraTor database. */
 public class QueryResponse {
 
-  @Expose(serialize = false, deserialize = false)
   private static Logger logger = LoggerFactory.getLogger(QueryResponse.class);
 
   /* Actual version implemented by this class. */
-  @Expose(serialize = false, deserialize = false)
   private static final String VERSION = "1.0";
 
   /* Don't accept query responses with versions lower than this. */
-  @Expose(serialize = false, deserialize = false)
   private static final String FIRSTRECOGNIZEDVERSION = "1.0";
 
   /* Don't accept query responses with this version or higher. */
-  @Expose(serialize = false, deserialize = false)
   private static final String FIRSTUNRECOGNIZEDVERSION = "2.0";
 
+  private static ObjectMapper objectMapper = new ObjectMapper()
+      .setPropertyNamingStrategy(PropertyNamingStrategy.SNAKE_CASE)
+      .setSerializationInclusion(JsonInclude.Include.NON_EMPTY)
+      .setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.NONE)
+      .setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
+
   /** Version of this response format. */
-  @Expose
   String version = VERSION;
 
   /** Query IP address passed in the request; never <code>null</code>. */
-  @Expose
-  @SerializedName("query_address")
   String queryAddress;
 
   /** Query date passed in the request; never <code>null</code>. */
-  @Expose
-  @SerializedName("query_date")
   String queryDate;
 
   /** ISO-formatted valid-after time of the first status contained in the
    * database; only <code>null</code> if the database is empty. */
-  @Expose
-  @SerializedName("first_date_in_database")
   String firstDateInDatabase;
 
   /** ISO-formatted valid-after time of the last status contained in the
    * database; only <code>null</code> if the database is empty. */
-  @Expose
-  @SerializedName("last_date_in_database")
   String lastDateInDatabase;
 
   /** Whether there is at least one relevant status in the database on or within
    * a day of the requested date; <code>null</code> if the database is empty. */
-  @Expose
-  @SerializedName("relevant_statuses")
   Boolean relevantStatuses;
 
   /** All matches for the given IP address and date; <code>null</code> if there
    * were no matches at all. */
-  @Expose
   Match[] matches;
 
   /** Constructor for Gson. */
@@ -85,16 +77,16 @@ public class QueryResponse {
   }
 
   /** Return JSON string for given QueryResponse. */
-  public static String toJson(QueryResponse response) {
-    return new Gson().toJson(response);
+  public static String toJson(QueryResponse response) throws IOException {
+    return objectMapper.writeValueAsString(response);
   }
 
   /** Return QueryResponse parsed from the given input stream, or
    * {@code null} if something fails or an unrecognized version is found. */
   public static QueryResponse fromJson(Reader reader) {
-    Gson gson = new Gson();
     try {
-      QueryResponse response = gson.fromJson(reader, QueryResponse.class);
+      QueryResponse response = objectMapper.readValue(reader,
+          QueryResponse.class);
       if (null == response || null == response.version) {
         logger.warn("Response is either empty or does not contain "
             + "version information.");
@@ -107,7 +99,10 @@ public class QueryResponse {
         return null;
       }
       return response;
-    } catch (RuntimeException e) {
+    } catch (IOException | RuntimeException e) {
+      /* We're catching RuntimeException here, rather than IOException, so that
+       * we return null if anything goes wrong, including cases that we did not
+       * anticipate. */
       logger.error("JSON decoding failed.", e);
     }
     return null;
@@ -148,8 +143,6 @@ public class QueryResponse {
 
   /** All known IP addresses in the same /24 or /48 network; <code>null</code>
    * if there were direct matches for the given IP address. */
-  @Expose
-  @SerializedName("nearby_addresses")
   String[] nearbyAddresses;
 }
 
