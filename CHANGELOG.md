@@ -1,10 +1,11 @@
-# Changes in version 2.0.3 - 2018-0?-??
+# Changes in version 2.1.0 - 2018-05-29
 
  * Medium changes
    - Replace Gson with Jackson.
 
  * Minor changes
-   - Remove duplicate [] surrounding suggested IPv6 addresses.
+   - Remove duplicate [] surrounding suggested IPv6 addresses that
+     caused broken links.
 
 
 # Changes in version 2.0.2 - 2017-12-20
