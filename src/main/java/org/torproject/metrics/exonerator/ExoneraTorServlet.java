@@ -141,6 +141,9 @@ public class ExoneraTorServlet extends HttpServlet {
       PrintWriter out = new PrintWriter(so);
       this.writeHeader(out, rb, langStr);
 
+      /* Obtain request URL without query string parameters for links. */
+      String requestUrl = request.getRequestURL().toString();
+
       /* Write form. */
       boolean timestampOutOfRange = requestedDate.valid
           && (firstDate.valid && requestedDate.date.isBefore(firstDate.date)
@@ -155,43 +158,43 @@ public class ExoneraTorServlet extends HttpServlet {
       /* If both parameters are empty, don't print any summary and exit.
        * This is the start page. */
       if ("".equals(relayIp) && requestedDate.empty) {
-        this.writeFooter(out, rb, null, null);
+        this.writeFooter(out, rb, requestUrl, null, null);
 
         /* If only one parameter is empty and the other is not, print summary
          * with warning message and exit. */
       } else if ("".equals(relayIp)) {
         this.writeSummaryNoIp(out, rb);
-        this.writeFooter(out, rb, null, null);
+        this.writeFooter(out, rb, requestUrl, null, null);
       } else if (requestedDate.empty) {
         this.writeSummaryNoTimestamp(out, rb);
-        this.writeFooter(out, rb, null, null);
+        this.writeFooter(out, rb, requestUrl, null, null);
 
         /* If there's an issue with parsing either of the parameters, print
          * summary with error message and exit. */
       } else if (relayIpHasError) {
         this.writeSummaryInvalidIp(out, rb, ipParameter);
-        this.writeFooter(out, rb, null, null);
+        this.writeFooter(out, rb, requestUrl, null, null);
       } else if (!requestedDate.valid) {
         this.writeSummaryInvalidTimestamp(out, rb, requestedDate.asRequested);
-        this.writeFooter(out, rb, null, null);
+        this.writeFooter(out, rb, requestUrl, null, null);
 
         /* If the timestamp is too recent, print summary with error message and
          * exit. */
       } else if (requestedDate.tooRecent) {
         this.writeSummaryTimestampTooRecent(out, rb);
-        this.writeFooter(out, rb, null, null);
+        this.writeFooter(out, rb, requestUrl, null, null);
 
         /* If we were unable to connect to the database,
          * write an error message. */
       } else if (!successfullyConnectedToBackend) {
         this.writeSummaryUnableToConnectToBackend(out, rb);
-        this.writeFooter(out, rb, null, null);
+        this.writeFooter(out, rb, requestUrl, null, null);
 
         /* Similarly, if we found the database to be empty,
          * write an error message, too. */
       } else if (firstDate.empty || lastDate.empty) {
         this.writeSummaryNoData(out, rb);
-        this.writeFooter(out, rb, null, null);
+        this.writeFooter(out, rb, requestUrl, null, null);
 
         /* If the requested date is out of range, tell the user. */
       } else if (timestampOutOfRange) {
@@ -199,11 +202,11 @@ public class ExoneraTorServlet extends HttpServlet {
         this.writeSummaryTimestampOutsideRange(out, rb, requestedDate.asString,
             firstDate.asString, lastDate.date.isBefore(dayBeforeYesterday)
             ? lastDate.asString : dayBeforeYesterday.format(ISO_LOCAL_DATE));
-        this.writeFooter(out, rb, relayIp, requestedDate.asString);
+        this.writeFooter(out, rb, requestUrl, relayIp, requestedDate.asString);
 
       } else if (noRelevantConsensuses) {
         this.writeSummaryNoDataForThisInterval(out, rb);
-        this.writeFooter(out, rb, relayIp, requestedDate.asString);
+        this.writeFooter(out, rb, requestUrl, relayIp, requestedDate.asString);
 
         /* Print out result. */
       } else {
@@ -218,15 +221,15 @@ public class ExoneraTorServlet extends HttpServlet {
         } else {
           this.writeSummaryNegative(out, rb, relayIp, requestedDate.asString);
         }
-        this.writePermanentLink(out, rb, relayIp, requestedDate.asString,
-            langStr);
-        this.writeFooter(out, rb, relayIp, requestedDate.asString);
+        this.writePermanentLink(out, rb, requestUrl, relayIp,
+            requestedDate.asString, langStr);
+        this.writeFooter(out, rb, requestUrl, relayIp, requestedDate.asString);
       }
 
       /* Forward to the JSP that adds header and footer. */
       request.setAttribute("lang", langStr);
       request.setAttribute("body", so.toString());
-      request.getRequestDispatcher("WEB-INF/index.jsp").forward(request,
+      request.getRequestDispatcher("WEB-INF/exonerator.jsp").forward(request,
           response);
     } catch (Throwable th) {
       logger.error("Some problem in doGet.  Returning error.", th);
@@ -334,7 +337,7 @@ public class ExoneraTorServlet extends HttpServlet {
         + "        <div class=\"col-xs-12\">\n"
         + "          <div class=\"text-center\">\n"
         + "            <div class=\"row vbottom15\">\n"
-        + "              <h4>%s</h4>\n"
+        + "              <p>%s</p>\n"
         + "            </div> <!-- row -->\n"
         + "            <form class=\"form-inline\">\n"
         + "              <div class=\"form-group%s\">\n"
@@ -605,22 +608,24 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writePermanentLink(PrintWriter out, ResourceBundle rb,
-      String relayIp, String timestampStr, String langStr) throws IOException {
+      String requestUrl, String relayIp, String timestampStr, String langStr)
+      throws IOException {
     String encodedAddress = relayIp.contains(":")
         ? "[" + relayIp.replaceAll(":", "%3A") + "]" : relayIp;
     out.printf("      <div class=\"row\">\n"
         + "        <div class=\"col-xs-12\">\n"
         + "          <h2>%s</h2>\n"
-        + "          <pre>https://exonerator.torproject.org/?ip=%s&amp;"
+        + "          <pre>%s?ip=%s&amp;"
           + "timestamp=%s&amp;lang=%s</pre>\n"
         + "        </div><!-- col -->\n"
         + "      </div><!-- row -->\n",
-        rb.getString("permanentlink.heading"),
+        rb.getString("permanentlink.heading"), requestUrl,
         encodedAddress, timestampStr, langStr);
   }
 
-  private void writeFooter(PrintWriter out, ResourceBundle rb, String relayIp,
-      String timestampStr) throws IOException {
+  private void writeFooter(PrintWriter out, ResourceBundle rb,
+      String requestUrl, String relayIp, String timestampStr)
+      throws IOException {
     out.printf("    </div><!-- container -->\n"
         + "    <div class=\"container\">\n"
         + "      <div class=\"row\">\n"
@@ -651,11 +656,12 @@ public class ExoneraTorServlet extends HttpServlet {
     for (Map.Entry<String, String> entry
         : this.availableLanguageNames.entrySet()) {
       if (null != relayIp && null != timestampStr) {
-        out.printf(" <a href=\"/?ip=%s&timestamp=%s&lang=%s\">%s</a>",
-            relayIp, timestampStr, entry.getKey(), entry.getValue());
+        out.printf(" <a href=\"%s?ip=%s&timestamp=%s&lang=%s\">%s</a>",
+            requestUrl, relayIp, timestampStr, entry.getKey(),
+            entry.getValue());
       } else {
-        out.printf(" <a href=\"/?lang=%s\">%s</a>",
-            entry.getKey(), entry.getValue());
+        out.printf(" <a href=\"%s?lang=%s\">%s</a>",
+            requestUrl, entry.getKey(), entry.getValue());
       }
     }
     out.printf("</p>\n"

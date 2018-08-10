@@ -1,3 +1,14 @@
+# Changes in version 2.2.0 - 2018-08-??
+
+ * Medium changes
+   - Prepare ExoneraTorServlet for integration into Tor Metrics.
+   - Add a new ExoneraTorRedirectServlet that redirects to Tor
+     Metrics, and make it the default.
+
+ * Minor changes
+   - Provide a thin jar file without dependencies.
+
+
 # Changes in version 2.1.0 - 2018-05-29
 
  * Medium changes

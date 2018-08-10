@@ -6,10 +6,19 @@
        http://xmlns.jcp.org/xml/ns/javaee/web-app_3_1.xsd"
    metadata-complete="false" >
 
+  <!--
+
+    Notice: By default, we redirect all requests to:
+    https://metrics.torproject.org/exonerator.html
+
+    If this is not the desired behavior, simply replace the servlet-class below
+    with org.torproject.metrics.exonerator.ExoneraTorServlet and redeploy.
+
+  -->
   <servlet>
     <servlet-name>ExoneraTor</servlet-name>
     <servlet-class>
-      org.torproject.metrics.exonerator.ExoneraTorServlet
+      org.torproject.metrics.exonerator.ExoneraTorRedirectServlet
     </servlet-class>
   </servlet>
   <servlet-mapping>
