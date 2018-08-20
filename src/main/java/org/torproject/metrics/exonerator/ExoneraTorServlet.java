@@ -269,8 +269,7 @@ public class ExoneraTorServlet extends HttpServlet {
         int end = ipParameter.length()
             - (ipParameter.endsWith("::") ? 1 : 0);
         String[] parts = ipParameter.substring(start, end).split(":", -1);
-        for (int i = 0; i < parts.length; i++) {
-          String part = parts[i];
+        for (String part : parts) {
           if (part.length() == 0) {
             addressHex.append("x");
           } else if (part.length() <= 4) {

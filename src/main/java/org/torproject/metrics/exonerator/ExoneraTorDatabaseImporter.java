@@ -282,8 +282,7 @@ public class ExoneraTorDatabaseImporter {
           int end = orAddress.length()
               - (orAddress.endsWith("::]") ? 2 : 1);
           String[] parts = orAddress.substring(start, end).split(":", -1);
-          for (int i = 0; i < parts.length; i++) {
-            String part = parts[i];
+          for (String part : parts) {
             if (part.length() == 0) {
               addressHex.append("x");
             } else if (part.length() <= 4) {
