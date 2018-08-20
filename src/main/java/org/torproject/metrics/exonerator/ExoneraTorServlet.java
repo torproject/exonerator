@@ -61,8 +61,7 @@ public class ExoneraTorServlet extends HttpServlet {
 
   @Override
   public void doGet(HttpServletRequest request,
-      HttpServletResponse response) throws IOException,
-      ServletException {
+      HttpServletResponse response) throws IOException {
 
     /* Step 1: Parse the request. */
 
@@ -317,14 +316,13 @@ public class ExoneraTorServlet extends HttpServlet {
 
   /* Helper methods for writing the response. */
 
-  private void writeHeader(PrintWriter out, ResourceBundle rb, String langStr)
-      throws IOException {
+  private void writeHeader(PrintWriter out, ResourceBundle rb, String langStr) {
     out.printf("    <div class=\"container\">\n");
   }
 
   private void writeForm(PrintWriter out, ResourceBundle rb,
       String relayIp, boolean relayIpHasError, String timestampStr,
-      boolean timestampHasError, String langStr) throws IOException {
+      boolean timestampHasError, String langStr) {
     String ipValue = "";
     if (relayIp != null && relayIp.length() > 0) {
       if (relayIp.contains(":")) {
@@ -374,7 +372,7 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writeSummaryUnableToConnectToBackend(PrintWriter out,
-      ResourceBundle rb) throws IOException {
+      ResourceBundle rb) {
     String contactLink =
         "<a href=\"https://www.torproject.org/about/contact\">"
         + rb.getString("summary.serverproblem.dbempty.body.link")
@@ -386,8 +384,7 @@ public class ExoneraTorServlet extends HttpServlet {
         contactLink);
   }
 
-  private void writeSummaryNoData(PrintWriter out, ResourceBundle rb)
-      throws IOException {
+  private void writeSummaryNoData(PrintWriter out, ResourceBundle rb) {
     String contactLink =
         "<a href=\"https://www.torproject.org/about/contact\">"
         + rb.getString("summary.serverproblem.dbempty.body.link")
@@ -399,16 +396,14 @@ public class ExoneraTorServlet extends HttpServlet {
         contactLink);
   }
 
-  private void writeSummaryNoTimestamp(PrintWriter out, ResourceBundle rb)
-      throws IOException {
+  private void writeSummaryNoTimestamp(PrintWriter out, ResourceBundle rb) {
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-danger",
         rb.getString("summary.invalidparams.notimestamp.title"), null,
         rb.getString("summary.invalidparams.notimestamp.body"));
   }
 
-  private void writeSummaryNoIp(PrintWriter out, ResourceBundle rb)
-      throws IOException {
+  private void writeSummaryNoIp(PrintWriter out, ResourceBundle rb) {
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-danger", rb.getString("summary.invalidparams.noip.title"),
         null, rb.getString("summary.invalidparams.noip.body"));
@@ -416,7 +411,7 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private void writeSummaryTimestampOutsideRange(PrintWriter out,
       ResourceBundle rb, String timestampStr, String firstDate,
-      String lastDate) throws IOException {
+      String lastDate) {
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-danger",
         rb.getString("summary.invalidparams.timestamprange.title"), null,
@@ -425,7 +420,7 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writeSummaryInvalidIp(PrintWriter out, ResourceBundle rb,
-      String ipParameter) throws IOException {
+      String ipParameter) {
     String escapedIpParameter = ipParameter.length() > 40
         ? StringEscapeUtils.escapeHtml4(ipParameter.substring(0, 40))
         + "[...]" : StringEscapeUtils.escapeHtml4(ipParameter);
@@ -437,7 +432,7 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writeSummaryInvalidTimestamp(PrintWriter out,
-      ResourceBundle rb, String timestampParameter) throws IOException {
+      ResourceBundle rb, String timestampParameter) {
     String escapedTimestampParameter = timestampParameter.length() > 20
         ? StringEscapeUtils.escapeHtml4(timestampParameter
         .substring(0, 20)) + "[...]"
@@ -450,14 +445,14 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writeSummaryTimestampTooRecent(PrintWriter out,
-      ResourceBundle rb) throws IOException {
+      ResourceBundle rb) {
     this.writeSummary(out, rb.getString("summary.heading"), "panel-danger",
         rb.getString("summary.invalidparams.timestamptoorecent.title"),
         null, rb.getString("summary.invalidparams.timestamptoorecent.body"));
   }
 
   private void writeSummaryNoDataForThisInterval(PrintWriter out,
-      ResourceBundle rb) throws IOException {
+      ResourceBundle rb) {
     String contactLink =
         "<a href=\"https://www.torproject.org/about/contact\">"
         + rb.getString("summary.serverproblem.dbempty.body.link")
@@ -471,7 +466,7 @@ public class ExoneraTorServlet extends HttpServlet {
 
   void writeSummaryAddressesInSameNetwork(PrintWriter out,
       ResourceBundle rb, String relayIp, String timestampStr, String langStr,
-      List<String> addressesInSameNetwork) throws IOException {
+      List<String> addressesInSameNetwork) {
     Object[][] panelItems = new Object[addressesInSameNetwork.size()][];
     for (int i = 0; i < addressesInSameNetwork.size(); i++) {
       String addressInSameNetwork = addressesInSameNetwork.get(i);
@@ -497,7 +492,7 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writeSummaryPositive(PrintWriter out, ResourceBundle rb,
-      String relayIp, String timestampStr) throws IOException {
+      String relayIp, String timestampStr) {
     String formattedRelayIp = relayIp.contains(":")
         ? "[" + relayIp + "]" : relayIp;
     this.writeSummary(out, rb.getString("summary.heading"),
@@ -507,7 +502,7 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writeSummaryNegative(PrintWriter out, ResourceBundle rb,
-      String relayIp, String timestampStr) throws IOException {
+      String relayIp, String timestampStr) {
     String formattedRelayIp = relayIp.contains(":")
         ? "[" + relayIp + "]" : relayIp;
     this.writeSummary(out, rb.getString("summary.heading"),
@@ -518,8 +513,7 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private void writeSummary(PrintWriter out, String heading,
       String panelContext, String panelTitle, Object[][] panelItems,
-      String panelBodyTemplate, Object... panelBodyArgs)
-      throws IOException {
+      String panelBodyTemplate, Object... panelBodyArgs) {
     out.printf("      <div class=\"row\">\n"
         + "        <div class=\"col-xs-12\">\n"
         + "          <h2>%s</h2>\n"
@@ -545,8 +539,7 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writeTechnicalDetails(PrintWriter out, ResourceBundle rb,
-      String relayIp, String timestampStr, List<String[]> tableRows)
-      throws IOException {
+      String relayIp, String timestampStr, List<String[]> tableRows) {
     String formattedRelayIp = relayIp.contains(":")
         ? "[" + relayIp + "]" : relayIp;
     out.printf("      <div class=\"row\">\n"
@@ -608,8 +601,7 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writePermanentLink(PrintWriter out, ResourceBundle rb,
-      String requestUrl, String relayIp, String timestampStr, String langStr)
-      throws IOException {
+      String requestUrl, String relayIp, String timestampStr, String langStr) {
     String encodedAddress = relayIp.contains(":")
         ? "[" + relayIp.replaceAll(":", "%3A") + "]" : relayIp;
     out.printf("      <div class=\"row\">\n"
@@ -624,8 +616,7 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writeFooter(PrintWriter out, ResourceBundle rb,
-      String requestUrl, String relayIp, String timestampStr)
-      throws IOException {
+      String requestUrl, String relayIp, String timestampStr) {
     out.printf("    </div><!-- container -->\n"
         + "    <div class=\"container\">\n"
         + "      <div class=\"row\">\n"
