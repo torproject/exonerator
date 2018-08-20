@@ -20,7 +20,6 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.Collections;
 import java.util.List;
 import java.util.SortedSet;
 import java.util.TimeZone;
@@ -356,16 +355,15 @@ public class QueryServlet extends HttpServlet {
         }
       }
       if (!matches.isEmpty()) {
-        Collections.sort(matches,
-            (m1, m2) -> {
-              if (m1 == m2) {
-                return 0;
-              } else if (!m1.timestamp.equals(m2.timestamp)) {
-                return m1.timestamp.compareTo(m2.timestamp);
-              } else {
-                return m1.fingerprint.compareTo(m2.fingerprint);
-              }
-            });
+        matches.sort((m1, m2) -> {
+          if (m1 == m2) {
+            return 0;
+          } else if (!m1.timestamp.equals(m2.timestamp)) {
+            return m1.timestamp.compareTo(m2.timestamp);
+          } else {
+            return m1.fingerprint.compareTo(m2.fingerprint);
+          }
+        });
         response.matches = matches.toArray(new QueryResponse.Match[0]);
       } else {
         List<String> nearbyAddresses = new ArrayList<>();
