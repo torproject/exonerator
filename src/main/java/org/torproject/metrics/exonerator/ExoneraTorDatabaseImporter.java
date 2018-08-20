@@ -32,7 +32,6 @@ import java.sql.Types;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
@@ -209,10 +208,8 @@ public class ExoneraTorDatabaseImporter {
         DescriptorSourceFactory.createDescriptorReader();
     descriptorReader.setMaxDescriptorsInQueue(20);
     descriptorReader.setExcludedFiles(lastImportHistory);
-    Iterator<Descriptor> descriptors = descriptorReader.readDescriptors(
-        new File(importDirString)).iterator();
-    while (descriptors.hasNext()) {
-      Descriptor descriptor = descriptors.next();
+    for (Descriptor descriptor : descriptorReader.readDescriptors(
+        new File(importDirString))) {
       if (descriptor instanceof RelayNetworkStatusConsensus) {
         parseConsensus((RelayNetworkStatusConsensus) descriptor);
       } else if (descriptor instanceof ExitList) {
