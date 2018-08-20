@@ -71,7 +71,7 @@ public class ExoneraTorDatabaseImporter {
       logger.error("Could not find config file.  Exiting.");
       System.exit(1);
     }
-    String line = null;
+    String line;
     try {
       BufferedReader br = new BufferedReader(new FileReader(configFile));
       while ((line = br.readLine()) != null) {
@@ -177,7 +177,7 @@ public class ExoneraTorDatabaseImporter {
       try {
         BufferedReader br = new BufferedReader(new FileReader(
             parseHistoryFile));
-        String line = null;
+        String line;
         int lineNumber = 0;
         while ((line = br.readLine()) != null) {
           lineNumber++;
