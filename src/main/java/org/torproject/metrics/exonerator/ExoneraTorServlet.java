@@ -110,7 +110,7 @@ public class ExoneraTorServlet extends HttpServlet {
               StringBuilder sb = new StringBuilder();
               int writtenAddresses = 0;
               for (String address : match.addresses) {
-                sb.append((writtenAddresses++ > 0 ? ", " : "") + address);
+                sb.append(writtenAddresses++ > 0 ? ", " : "").append(address);
               }
               String[] statusEntry = new String[]{match.timestamp,
                   sb.toString(), match.fingerprint, match.nickname,

@@ -145,7 +145,7 @@ public class ExoneraTorDatabaseImporter {
       }
       BufferedWriter bw = new BufferedWriter(new FileWriter(
           "exonerator-lock"));
-      bw.append(String.valueOf(System.currentTimeMillis()) + "\n");
+      bw.append(String.valueOf(System.currentTimeMillis())).append("\n");
       bw.close();
     } catch (IOException e) {
       logger.warn("Could not create 'exonerator-lock' file.  Exiting.");
