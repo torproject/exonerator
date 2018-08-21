@@ -175,8 +175,7 @@ public class QueryServlet extends HttpServlet {
     for (int i = 0; i < address24Bytes.length; i++) {
       address24Bytes[i] = (byte) Integer.parseInt(relayIpParts[i]);
     }
-    String address24 = Hex.encodeHexString(address24Bytes);
-    return address24;
+    return Hex.encodeHexString(address24Bytes);
   }
 
   private String convertIpV6ToHex(String relayIp) {
