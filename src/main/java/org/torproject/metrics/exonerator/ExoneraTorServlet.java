@@ -239,8 +239,8 @@ public class ExoneraTorServlet extends HttpServlet {
 
   /* Helper methods for handling the request. */
 
-  /** Parse an IP parameter and return either a non-<code>null</code> value in
-   * case the parameter was valid or empty, or <code>null</code> if it was
+  /** Parse an IP parameter and return either a non-{@code null} value in
+   * case the parameter was valid or empty, or {@code null} if it was
    * non-empty and invalid. */
   static String parseIpParameter(String passedIpParameter) {
     String relayIp = null;

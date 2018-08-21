@@ -37,25 +37,25 @@ public class QueryResponse {
   /** Version of this response format. */
   String version = VERSION;
 
-  /** Query IP address passed in the request; never <code>null</code>. */
+  /** Query IP address passed in the request; never {@code null}. */
   String queryAddress;
 
-  /** Query date passed in the request; never <code>null</code>. */
+  /** Query date passed in the request; never {@code null}. */
   String queryDate;
 
   /** ISO-formatted valid-after time of the first status contained in the
-   * database; only <code>null</code> if the database is empty. */
+   * database; only {@code null} if the database is empty. */
   String firstDateInDatabase;
 
   /** ISO-formatted valid-after time of the last status contained in the
-   * database; only <code>null</code> if the database is empty. */
+   * database; only {@code null} if the database is empty. */
   String lastDateInDatabase;
 
   /** Whether there is at least one relevant status in the database on or within
-   * a day of the requested date; <code>null</code> if the database is empty. */
+   * a day of the requested date; {@code null} if the database is empty. */
   Boolean relevantStatuses;
 
-  /** All matches for the given IP address and date; <code>null</code> if there
+  /** All matches for the given IP address and date; {@code null} if there
    * were no matches at all. */
   Match[] matches;
 
@@ -123,7 +123,7 @@ public class QueryResponse {
     /** Relay nickname. */
     String nickname;
 
-    /** Whether this relay permitted exiting or not; <code>null</code> if
+    /** Whether this relay permitted exiting or not; {@code null} if
      * unknown. */
     Boolean exit;
 
@@ -141,7 +141,7 @@ public class QueryResponse {
     }
   }
 
-  /** All known IP addresses in the same /24 or /48 network; <code>null</code>
+  /** All known IP addresses in the same /24 or /48 network; {@code null}
    * if there were direct matches for the given IP address. */
   String[] nearbyAddresses;
 }
