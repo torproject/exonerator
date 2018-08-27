@@ -1,3 +1,9 @@
+# Changes in version 3.0.1 - 2018-08-??
+
+ * Medium changes
+   - Fix links to IP addresses in same /24.
+
+
 # Changes in version 3.0.0 - 2018-08-13
 
  * Major changes

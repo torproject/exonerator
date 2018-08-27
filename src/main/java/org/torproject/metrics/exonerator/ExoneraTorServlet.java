@@ -215,7 +215,7 @@ public class ExoneraTorServlet extends HttpServlet {
               statusEntries);
         } else if (addressesInSameNetwork != null
             && !addressesInSameNetwork.isEmpty()) {
-          this.writeSummaryAddressesInSameNetwork(out, rb, relayIp,
+          this.writeSummaryAddressesInSameNetwork(out, rb, requestUrl, relayIp,
               requestedDate.asString, langStr, addressesInSameNetwork);
         } else {
           this.writeSummaryNegative(out, rb, relayIp, requestedDate.asString);
@@ -464,8 +464,8 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   void writeSummaryAddressesInSameNetwork(PrintWriter out,
-      ResourceBundle rb, String relayIp, String timestampStr, String langStr,
-      List<String> addressesInSameNetwork) {
+      ResourceBundle rb, String requestUrl, String relayIp, String timestampStr,
+      String langStr, List<String> addressesInSameNetwork) {
     Object[][] panelItems = new Object[addressesInSameNetwork.size()][];
     for (int i = 0; i < addressesInSameNetwork.size(); i++) {
       String addressInSameNetwork = addressesInSameNetwork.get(i);
@@ -473,12 +473,12 @@ public class ExoneraTorServlet extends HttpServlet {
       String address;
       if (addressInSameNetwork.contains(":")) {
         address = addressInSameNetwork.replaceAll("[\\[\\]]", "");
-        link = String.format("/?ip=[%s]&timestamp=%s&lang=%s",
-            address.replaceAll(":", "%3A"), timestampStr, langStr);
+        link = String.format("%s?ip=[%s]&timestamp=%s&lang=%s",
+            requestUrl, address.replaceAll(":", "%3A"), timestampStr, langStr);
         address = "[" + address + "]";
       } else {
-        link = String.format("/?ip=%s&timestamp=%s&lang=%s",
-            addressInSameNetwork, timestampStr, langStr);
+        link = String.format("%s?ip=%s&timestamp=%s&lang=%s",
+            requestUrl, addressInSameNetwork, timestampStr, langStr);
         address = addressInSameNetwork;
       }
       panelItems[i] = new Object[] { link, address };

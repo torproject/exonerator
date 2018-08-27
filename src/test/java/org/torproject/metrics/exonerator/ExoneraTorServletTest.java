@@ -49,7 +49,7 @@ public class ExoneraTorServletTest {
     for (QueryResponse qr : qrs) {
       StringWriter sw = new StringWriter();
       es.writeSummaryAddressesInSameNetwork(new PrintWriter(sw), rb,
-          qr.queryAddress, qr.queryDate, "en",
+          "http://localhost:8080/", qr.queryAddress, qr.queryDate, "en",
           Arrays.asList(qr.nearbyAddresses));
       String errorMsg = "Test data:" + QueryResponse.toJson(qr)
           + "\nresult:\n" + sw.toString();
