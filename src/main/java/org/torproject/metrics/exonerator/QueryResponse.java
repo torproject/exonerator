@@ -37,10 +37,14 @@ public class QueryResponse {
   /** Version of this response format. */
   String version = VERSION;
 
-  /** Query IP address passed in the request; never {@code null}. */
+  /**
+   * Query IP address passed in the request; never {@code null}.
+   */
   String queryAddress;
 
-  /** Query date passed in the request; never {@code null}. */
+  /**
+   * Query date passed in the request; never {@code null}.
+   */
   String queryDate;
 
   /** ISO-formatted valid-after time of the first status contained in the
