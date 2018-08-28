@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.TreeSet;
 
 @RunWith(Parameterized.class)
 public class QueryResponseTest {
@@ -46,10 +47,10 @@ public class QueryResponseTest {
         {new QueryResponse("1.0", "12.13.14.15", "2016-12-12", "2016-01-01",
           "2016-12-31", true,
         new QueryResponse.Match[]{new QueryResponse.Match("2016-12-03",
-        new String[] {"12.13.14.15", "12.13.14.16"},
+        new TreeSet<>(Arrays.asList("12.13.14.15", "12.13.14.16")),
         "fingerprint-not-checked", "some name", true),
           new QueryResponse.Match("2012-12-03",
-          new String[] {"12.13.20.15", "12.13.20.16"},
+          new TreeSet<>(Arrays.asList("12.13.20.15", "12.13.20.16")),
           "fingerprint2-not-checked", "some name2", false)},
           new String[] {"12.13.14.15", "12.13.14.16"}),
           "{\"version\":\"1.0\","
@@ -71,10 +72,10 @@ public class QueryResponseTest {
         {new QueryResponse("1.0", "12.13.14.15", "2016-12-12", "2016-01-01",
             "2016-12-31", false,
             new QueryResponse.Match[]{new QueryResponse.Match("2016-12-03",
-            new String[] {"12.13.14.15", "12.13.14.16"},
+            new TreeSet<>(Arrays.asList("12.13.14.15", "12.13.14.16")),
             "fingerprint-not-checked", "some name", null),
               new QueryResponse.Match("2012-12-03",
-              new String[] {"12.13.20.15", "12.13.20.16"},
+              new TreeSet<>(Arrays.asList("12.13.20.15", "12.13.20.16")),
               "fingerprint2-not-checked", "some name2", true)},
             new String[] {"12.13.14.15", "12.13.14.16"}),
           "{\"version\":\"1.0\","

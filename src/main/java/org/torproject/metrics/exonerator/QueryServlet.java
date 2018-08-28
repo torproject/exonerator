@@ -3,6 +3,7 @@
 
 package org.torproject.metrics.exonerator;
 
+import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.codec.binary.Hex;
 
 import org.slf4j.Logger;
@@ -13,16 +14,20 @@ import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedMap;
 import java.util.SortedSet;
 import java.util.TimeZone;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
 
@@ -248,8 +253,7 @@ public class QueryServlet extends HttpServlet {
     if (addressHex == null) {
       return null;
     }
-    String address24Or48Hex = !relayIp.contains(":")
-        ? addressHex.substring(0, 6) : addressHex.substring(0, 12);
+    String address24Hex = addressHex.substring(0, 6);
 
     /* Prepare formatting response items. */
     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
@@ -258,70 +262,88 @@ public class QueryServlet extends HttpServlet {
         "yyyy-MM-dd HH:mm:ss");
     validAfterTimeFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
 
-    /* Make the database query. */
-    SortedSet<Long> allValidAfters = new TreeSet<>();
-    List<QueryResponse.Match> matches = new ArrayList<>();
-    SortedSet<String> allAddresses = new TreeSet<>();
+    /* Store all dates contained in the query response in order to populate the
+     * {first|last}_date_in_database and relevant_statuses fields. */
+    SortedSet<Long> allDates = new TreeSet<>();
+
+    /* Store all possible matches for the results table by base64-encoded
+     * fingerprint and valid-after time. This map is first populated by going
+     * through the result set and adding or updating map entries, so that
+     * there's one entry per fingerprint and valid-after time with one or more
+     * addresses. In a second step, exit addresses are added to map entries. */
+    SortedMap<String, SortedMap<Long, QueryResponse.Match>>
+        matchesByFingerprintBase64AndValidAfter = new TreeMap<>();
+
+    /* Store all possible matches by address. This map has two purposes: First,
+     * the query returns all entries matching the first 24 bits of an address,
+     * which may include other addresses than the one being looked for. This map
+     * then has only those matches that are relevant. Second, if there are no
+     * matches for the given address, this map may contain nearby addresses in
+     * the same /24 or /48 that can be included in the nearby_addresses
+     * field. */
+    SortedMap<String, Set<QueryResponse.Match>>
+        matchesByAddress = new TreeMap<>();
+
+    /* Store all exit addresses by base64-encoded fingerprint and scanned
+     * time. These addresses are added to this map while going through the
+     * result set and later added to the two maps above containing matches. The
+     * reason for separating these steps is that the result set may contain
+     * status entries and exit list entries in any specific order. */
+    SortedMap<String, SortedMap<Long, String>>
+        exitAddressesByFingeprintBase64AndScanned = new TreeMap<>();
+
+    /* Make the database query to populate the sets and maps above. */
     final long requestedConnection = System.currentTimeMillis();
     Calendar utcCalendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
     try (Connection conn = this.ds.getConnection()) {
-      try (CallableStatement cs = conn.prepareCall(String.format(
-          "{call search_by_address%s_date(?, ?)}",
-          relayIp.contains(":") ? 48 : 24))) {
-        cs.setString(1, address24Or48Hex);
-        cs.setDate(2, new java.sql.Date(timestamp), utcCalendar);
+      try (CallableStatement cs = conn.prepareCall(
+          "{call search_by_date_address24(?, ?)}")) {
+        cs.setDate(1, new java.sql.Date(timestamp), utcCalendar);
+        cs.setString(2, address24Hex);
         try (ResultSet rs = cs.executeQuery()) {
           while (rs.next()) {
-            Timestamp ts = rs.getTimestamp(2, utcCalendar);
-            if (null == ts) {
-              continue;
-            }
-            long validafter = ts.getTime();
-            allValidAfters.add(validafter);
-            byte[] rawstatusentry = rs.getBytes(1);
-            if (null == rawstatusentry) {
-              continue;
-            }
-            SortedSet<String> addresses = new TreeSet<>();
-            SortedSet<String> addressesHex = new TreeSet<>();
-            String nickname = null;
-            Boolean exit = null;
-            for (String line : new String(rawstatusentry).split("\n")) {
-              if (line.startsWith("r ")) {
-                String[] parts = line.split(" ");
-                nickname = parts[1];
-                addresses.add(parts[6]);
-                addressesHex.add(this.convertIpV4ToHex(parts[6]));
-              } else if (line.startsWith("a ")) {
-                String address = line.substring("a ".length(),
-                    line.lastIndexOf(":"));
-                addresses.add(address);
-                String orAddressHex = !address.contains(":")
-                    ? this.convertIpV4ToHex(address)
-                    : this.convertIpV6ToHex(address);
-                addressesHex.add(orAddressHex);
-              } else if (line.startsWith("p ")) {
-                exit = !line.equals("p reject 1-65535");
+            java.sql.Date date = rs.getDate(1, utcCalendar);
+            String fingerprintBase64 = rs.getString(2);
+            java.sql.Timestamp scanned = rs.getTimestamp(3, utcCalendar);
+            String exitAddress = rs.getString(4);
+            java.sql.Timestamp validAfter = rs.getTimestamp(5, utcCalendar);
+            String nickname = rs.getString(6);
+            Boolean exit = rs.getBoolean(7);
+            String orAddress = rs.getString(8);
+            if (null != date) {
+              allDates.add(date.getTime());
+            } else if (null != scanned) {
+              long scannedMillis = scanned.getTime();
+              exitAddressesByFingeprintBase64AndScanned.putIfAbsent(
+                  fingerprintBase64, new TreeMap<>());
+              exitAddressesByFingeprintBase64AndScanned.get(fingerprintBase64)
+                  .put(scannedMillis, exitAddress);
+            } else if (null != validAfter) {
+              long validAfterMillis = validAfter.getTime();
+              matchesByFingerprintBase64AndValidAfter.putIfAbsent(
+                  fingerprintBase64, new TreeMap<>());
+              if (!matchesByFingerprintBase64AndValidAfter
+                  .get(fingerprintBase64).containsKey(validAfterMillis)) {
+                String validAfterString = validAfterTimeFormat.format(
+                    validAfterMillis);
+                String fingerprint = Hex.encodeHexString(Base64.decodeBase64(
+                    fingerprintBase64 + "=")).toUpperCase();
+                matchesByFingerprintBase64AndValidAfter.get(fingerprintBase64)
+                    .put(validAfterMillis, new QueryResponse.Match(
+                        validAfterString, new TreeSet<>(), fingerprint,
+                        nickname, exit));
               }
+              QueryResponse.Match match
+                  = matchesByFingerprintBase64AndValidAfter
+                  .get(fingerprintBase64).get(validAfterMillis);
+              if (orAddress.contains(":")) {
+                match.addresses.add("[" + orAddress + "]");
+              } else {
+                match.addresses.add(orAddress);
+              }
+              matchesByAddress.putIfAbsent(orAddress, new HashSet<>());
+              matchesByAddress.get(orAddress).add(match);
             }
-            String exitaddress = rs.getString(4);
-            if (exitaddress != null && exitaddress.length() > 0) {
-              addresses.add(exitaddress);
-              addressesHex.add(this.convertIpV4ToHex(exitaddress));
-            }
-            allAddresses.addAll(addresses);
-            if (!addressesHex.contains(addressHex)) {
-              continue;
-            }
-            String validAfterString = validAfterTimeFormat.format(validafter);
-            String fingerprint = rs.getString(3).toUpperCase();
-            QueryResponse.Match match = new QueryResponse.Match();
-            match.timestamp = validAfterString;
-            match.addresses = addresses.toArray(new String[0]);
-            match.fingerprint = fingerprint;
-            match.nickname = nickname;
-            match.exit = exit;
-            matches.add(match);
           }
         } catch (SQLException e) {
           this.logger.warn("Result set error.  Returning 'null'.", e);
@@ -338,48 +360,72 @@ public class QueryServlet extends HttpServlet {
       return null;
     }
 
-    QueryResponse response = new QueryResponse();
-    response.queryAddress = relayIp;
-    response.queryDate = dateFormat.format(timestamp);
-    if (!allValidAfters.isEmpty()) {
-      response.firstDateInDatabase = dateFormat.format(allValidAfters.first());
-      response.lastDateInDatabase = dateFormat.format(allValidAfters.last());
-      response.relevantStatuses = false;
-      long timestampFrom = timestamp - MILLISECONDS_IN_A_DAY;
-      long timestampTo = timestamp + 2 * MILLISECONDS_IN_A_DAY - 1L;
-      for (long validAfter : allValidAfters) {
-        if (validAfter >= timestampFrom && validAfter <= timestampTo) {
-          response.relevantStatuses = true;
-          break;
+    /* Go through exit addresses and update possible matches. */
+    for (Map.Entry<String, SortedMap<Long, String>> e
+        : exitAddressesByFingeprintBase64AndScanned.entrySet()) {
+      String fingerprintBase64 = e.getKey();
+      if (!matchesByFingerprintBase64AndValidAfter.containsKey(
+          fingerprintBase64)) {
+        /* This is a rare edge case where an exit list entry exists, but where
+         * that relay was not included in any consensus with a valid-after time
+         * of up to 24 hours after the scan time. This match is not supposed to
+         * show up in the results, nor should the exit address show up in
+         * nearby matches. We'll just skip it. */
+        continue;
+      }
+      for (Map.Entry<Long, String> e1 : e.getValue().entrySet()) {
+        long scannedMillis = e1.getKey();
+        String exitAddress = e1.getValue();
+        for (QueryResponse.Match match
+            : matchesByFingerprintBase64AndValidAfter.get(fingerprintBase64)
+            .subMap(scannedMillis, scannedMillis + MILLISECONDS_IN_A_DAY)
+            .values()) {
+          match.addresses.add(exitAddress);
+          matchesByAddress.putIfAbsent(exitAddress, new HashSet<>());
+          matchesByAddress.get(exitAddress).add(match);
         }
       }
-      if (!matches.isEmpty()) {
-        matches.sort((m1, m2) -> {
-          if (m1 == m2) {
-            return 0;
-          } else if (!m1.timestamp.equals(m2.timestamp)) {
-            return m1.timestamp.compareTo(m2.timestamp);
-          } else {
-            return m1.fingerprint.compareTo(m2.fingerprint);
-          }
-        });
-        response.matches = matches.toArray(new QueryResponse.Match[0]);
-      } else {
-        List<String> nearbyAddresses = new ArrayList<>();
-        for (String nearbyAddress : allAddresses) {
-          String nearbyAddressHex = !nearbyAddress.contains(":")
-              ? this.convertIpV4ToHex(nearbyAddress)
-              : this.convertIpV6ToHex(nearbyAddress);
-          String nearbyAddress24Or48Hex = !nearbyAddress.contains(":")
-              ? nearbyAddressHex.substring(0, 6)
-              : nearbyAddressHex.substring(0, 12);
-          if (address24Or48Hex.equals(nearbyAddress24Or48Hex)) {
-            nearbyAddresses.add(nearbyAddress);
-          }
+    }
+
+    /* Write all results to a new QueryResponse object. */
+    final QueryResponse response = new QueryResponse();
+    response.queryAddress = relayIp;
+    response.queryDate = dateFormat.format(timestamp);
+    if (!allDates.isEmpty()) {
+      response.firstDateInDatabase = dateFormat.format(allDates.first());
+      response.lastDateInDatabase = dateFormat.format(allDates.last());
+      response.relevantStatuses = allDates.contains(timestamp)
+          || allDates.contains(timestamp - MILLISECONDS_IN_A_DAY)
+          || allDates.contains(timestamp + MILLISECONDS_IN_A_DAY);
+    }
+    if (matchesByAddress.containsKey(relayIp)) {
+      List<QueryResponse.Match> matchesList
+          = new ArrayList<>(matchesByAddress.get(relayIp));
+      matchesList.sort((m1, m2) -> {
+        if (m1 == m2) {
+          return 0;
+        } else if (!m1.timestamp.equals(m2.timestamp)) {
+          return m1.timestamp.compareTo(m2.timestamp);
+        } else {
+          return m1.fingerprint.compareTo(m2.fingerprint);
         }
-        if (!nearbyAddresses.isEmpty()) {
-          response.nearbyAddresses = nearbyAddresses.toArray(new String[0]);
+      });
+      response.matches = matchesList.toArray(new QueryResponse.Match[0]);
+    } else {
+      SortedSet<String> nearbyAddresses = new TreeSet<>();
+      String relayIpHex24Or48 = !relayIp.contains(":")
+          ? this.convertIpV4ToHex(relayIp).substring(0, 6)
+          : this.convertIpV6ToHex(relayIp).substring(0, 12);
+      for (String address : matchesByAddress.keySet()) {
+        String nearbyAddressHex24Or48 = !address.contains(":")
+            ? this.convertIpV4ToHex(address).substring(0, 6)
+            : this.convertIpV6ToHex(address).substring(0, 12);
+        if (relayIpHex24Or48.equals(nearbyAddressHex24Or48)) {
+          nearbyAddresses.add(address);
         }
+      }
+      if (!nearbyAddresses.isEmpty()) {
+        response.nearbyAddresses = nearbyAddresses.toArray(new String[0]);
       }
     }
 

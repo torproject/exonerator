@@ -1,6 +1,16 @@
 -- Copyright 2011--2018 The Tor Project
 -- See LICENSE for licensing information
 
+--------------------------------------------------------------------------------
+-- This schema has been superseded by exonerator2.sql:
+--  - Existing databases can be migrated by running exonerator2.sql. See the
+--    instructions in that file for details.
+--  - New databases need to be initialized by running this script first and then
+--    exonerator2.sql.
+--  - At some point in the future this file will disappear, and exonerator2.sql
+--    will be modified to create a new database from scratch.
+--------------------------------------------------------------------------------
+
 -- The statusentry table stores network status consensus entries listing
 -- a relay as running at a certain point in time.  Only relays with the
 -- Running flag shall be inserted into this table.  If a relay advertises

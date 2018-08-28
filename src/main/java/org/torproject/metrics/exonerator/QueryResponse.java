@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.util.SortedSet;
 
 /** Query response from the ExoneraTor database. */
 public class QueryResponse {
@@ -119,7 +120,7 @@ public class QueryResponse {
     String timestamp;
 
     /** All known IP addresses of the relay at the time. */
-    String[] addresses;
+    SortedSet<String> addresses;
 
     /** Relay fingerprint. */
     String fingerprint;
@@ -131,11 +132,11 @@ public class QueryResponse {
      * unknown. */
     Boolean exit;
 
-    /** Constructor for Gson. */
+    /** Constructor for JSON library. */
     public Match() {}
 
     /** Constructor for tests. */
-    Match(String timestamp, String[] addresses, String fingerprint,
+    Match(String timestamp, SortedSet<String> addresses, String fingerprint,
         String nickname, Boolean exit) {
       this.timestamp = timestamp;
       this.addresses = addresses;

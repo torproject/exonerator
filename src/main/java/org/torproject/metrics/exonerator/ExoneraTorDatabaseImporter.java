@@ -12,6 +12,8 @@ import org.torproject.descriptor.ExitList.Entry;
 import org.torproject.descriptor.NetworkStatusEntry;
 import org.torproject.descriptor.RelayNetworkStatusConsensus;
 
+import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.codec.binary.Hex;
 
 import org.slf4j.Logger;
@@ -28,8 +30,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.sql.Types;
-import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.HashSet;
 import java.util.Map;
@@ -114,9 +114,9 @@ public class ExoneraTorDatabaseImporter {
   private static void prepareDatabaseStatements() {
     try {
       insertStatusentryStatement = connection.prepareCall(
-          "{call insert_statusentry(?, ?, ?, ?, ?, ?, ?)}");
+          "{call insert_statusentry_oraddress(?, ?, ?, ?, ?, ?)}");
       insertExitlistentryStatement = connection.prepareCall(
-          "{call insert_exitlistentry(?, ?, ?, ?, ?)}");
+          "{call insert_exitlistentry_exitaddress(?, ?, ?, ?)}");
     } catch (SQLException e) {
       logger.warn("Could not prepare callable statements to "
                   + "import data into the database.  Exiting.", e);
@@ -221,28 +221,35 @@ public class ExoneraTorDatabaseImporter {
     nextImportHistory.putAll(descriptorReader.getParsedFiles());
   }
 
-  /* Date format to parse UTC timestamps. */
-  private static SimpleDateFormat parseFormat;
-
-  static {
-    parseFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-    parseFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-  }
-
   /* Parse a consensus. */
   private static void parseConsensus(RelayNetworkStatusConsensus consensus) {
+    long validAfterMillis = consensus.getValidAfterMillis();
     for (NetworkStatusEntry entry : consensus.getStatusEntries().values()) {
       if (entry.getFlags().contains("Running")) {
+        String fingerprintBase64 = null;
+        try {
+          fingerprintBase64 = Base64.encodeBase64String(
+              Hex.decodeHex(entry.getFingerprint().toCharArray()))
+              .replaceAll("=", "");
+        } catch (DecoderException e) {
+          logger.warn("Unable to decode hex fingerprint {} to convert it back "
+              + "to base64. Aborting import.", entry.getFingerprint(), e);
+          System.exit(1);
+        }
+        final String nickname = entry.getNickname();
+        Boolean exit = null;
+        if (null != entry.getDefaultPolicy() && null != entry.getPortList()) {
+          exit = "accept".equals(entry.getDefaultPolicy())
+              || !"1-65535".equals(entry.getPortList());
+        }
         Set<String> orAddresses = new HashSet<>();
         orAddresses.add(entry.getAddress());
         for (String orAddressAndPort : entry.getOrAddresses()) {
           orAddresses.add(orAddressAndPort.substring(0,
               orAddressAndPort.lastIndexOf(":")));
         }
-        importStatusentry(consensus.getValidAfterMillis(),
-            entry.getFingerprint().toLowerCase(),
-            entry.getDescriptor().toLowerCase(),
-            orAddresses, entry.getStatusEntryBytes());
+        importStatusentry(validAfterMillis, fingerprintBase64, nickname,
+            exit, orAddresses);
       }
     }
   }
@@ -254,16 +261,16 @@ public class ExoneraTorDatabaseImporter {
   /* Import a status entry with one or more OR addresses into the
    * database. */
   private static void importStatusentry(long validAfterMillis,
-      String fingerprint, String descriptor, Set<String> orAddresses,
-      byte[] rawStatusentry) {
+      String fingerprintBase64, String nickname, Boolean exit,
+      Set<String> orAddresses) {
     try {
       for (String orAddress : orAddresses) {
         insertStatusentryStatement.clearParameters();
         insertStatusentryStatement.setTimestamp(1,
             new Timestamp(validAfterMillis), calendarUTC);
-        insertStatusentryStatement.setString(2, fingerprint);
-        insertStatusentryStatement.setString(3, descriptor);
+        insertStatusentryStatement.setString(2, fingerprintBase64);
         if (!orAddress.contains(":")) {
+          insertStatusentryStatement.setString(3, orAddress);
           String[] addressParts = orAddress.split("\\.");
           byte[] address24Bytes = new byte[3];
           address24Bytes[0] = (byte) Integer.parseInt(addressParts[0]);
@@ -271,8 +278,6 @@ public class ExoneraTorDatabaseImporter {
           address24Bytes[2] = (byte) Integer.parseInt(addressParts[2]);
           String orAddress24 = Hex.encodeHexString(address24Bytes);
           insertStatusentryStatement.setString(4, orAddress24);
-          insertStatusentryStatement.setNull(5, Types.VARCHAR);
-          insertStatusentryStatement.setString(6, orAddress);
         } else {
           StringBuilder addressHex = new StringBuilder();
           int start = orAddress.startsWith("[::") ? 2 : 1;
@@ -289,7 +294,7 @@ public class ExoneraTorDatabaseImporter {
               break;
             }
           }
-          String orAddress48 = null;
+          String orAddress24 = null;
           if (addressHex != null) {
             String addressHexString = addressHex.toString();
             addressHexString = addressHexString.replaceFirst("x",
@@ -297,22 +302,22 @@ public class ExoneraTorDatabaseImporter {
                 + "s", "0"));
             if (!addressHexString.contains("x")
                 && addressHexString.length() == 32) {
-              orAddress48 = addressHexString.replaceAll(" ", "0")
-                  .toLowerCase().substring(0, 12);
+              orAddress24 = addressHexString.replaceAll(" ", "0")
+                  .toLowerCase().substring(0, 6);
             }
           }
-          if (orAddress48 != null) {
-            insertStatusentryStatement.setNull(4, Types.VARCHAR);
-            insertStatusentryStatement.setString(5, orAddress48);
-            insertStatusentryStatement.setString(6,
+          if (orAddress24 != null) {
+            insertStatusentryStatement.setString(3,
                 orAddress.replaceAll("[\\[\\]]", ""));
+            insertStatusentryStatement.setString(4, orAddress24);
           } else {
             logger.error("Could not import status entry with IPv6 "
                          + "address '{}'.  Exiting.", orAddress);
             System.exit(1);
           }
         }
-        insertStatusentryStatement.setBytes(7, rawStatusentry);
+        insertStatusentryStatement.setString(5, nickname);
+        insertStatusentryStatement.setBoolean(6, exit);
         insertStatusentryStatement.execute();
       }
     } catch (SQLException e) {
@@ -321,12 +326,20 @@ public class ExoneraTorDatabaseImporter {
     }
   }
 
-  private static final byte[] IGNORED_RAW_EXITLIST_ENTRY = new byte[0];
-
   /* Parse an exit list. */
   private static void parseExitList(ExitList exitList) {
     for (Entry entry : exitList.getEntries()) {
       for (Map.Entry<String, Long> e : entry.getExitAddresses().entrySet()) {
+        String fingerprintBase64 = null;
+        try {
+          fingerprintBase64 = Base64.encodeBase64String(
+              Hex.decodeHex(entry.getFingerprint().toCharArray()))
+              .replaceAll("=", "");
+        } catch (DecoderException ex) {
+          logger.warn("Unable to decode hex fingerprint {} to convert to "
+              + "base64. Aborting import.", entry.getFingerprint(), ex);
+          System.exit(1);
+        }
         String exitAddress = e.getKey();
         /* TODO Extend the following code for IPv6 once the exit list
          * format supports it. */
@@ -341,24 +354,22 @@ public class ExoneraTorDatabaseImporter {
         String exitAddress24 = Hex.encodeHexString(
             exitAddress24Bytes);
         long scannedMillis = e.getValue();
-        importExitlistentry(entry.getFingerprint().toLowerCase(), exitAddress24,
-            exitAddress, scannedMillis, IGNORED_RAW_EXITLIST_ENTRY);
+        importExitlistentry(fingerprintBase64, exitAddress24, exitAddress,
+            scannedMillis);
       }
     }
   }
 
   /* Import an exit list entry into the database. */
-  private static void importExitlistentry(String fingerprint,
-      String exitAddress24, String exitAddress, long scannedMillis,
-      byte[] rawExitlistentry) {
+  private static void importExitlistentry(String fingerprintBase64,
+      String exitAddress24, String exitAddress, long scannedMillis) {
     try {
       insertExitlistentryStatement.clearParameters();
-      insertExitlistentryStatement.setString(1, fingerprint);
-      insertExitlistentryStatement.setString(2, exitAddress24);
-      insertExitlistentryStatement.setString(3, exitAddress);
+      insertExitlistentryStatement.setString(1, fingerprintBase64);
+      insertExitlistentryStatement.setString(2, exitAddress);
+      insertExitlistentryStatement.setString(3, exitAddress24);
       insertExitlistentryStatement.setTimestamp(4,
           new Timestamp(scannedMillis), calendarUTC);
-      insertExitlistentryStatement.setBytes(5, rawExitlistentry);
       insertExitlistentryStatement.execute();
     } catch (SQLException e) {
       logger.error("Could not import exit list entry.  Exiting.", e);
