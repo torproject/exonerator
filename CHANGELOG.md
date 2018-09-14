@@ -1,3 +1,9 @@
+# Changes in version 4.0.0 - 2018-08-14
+
+ * Major changes
+   - Reduce database size and variance of query response times.
+
+
 # Changes in version 3.0.1 - 2018-08-28
 
  * Medium changes
