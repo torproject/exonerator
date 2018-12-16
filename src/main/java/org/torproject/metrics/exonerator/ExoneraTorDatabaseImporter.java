@@ -29,13 +29,14 @@ import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.sql.Timestamp;
-import java.util.Calendar;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
-import java.util.TimeZone;
 import java.util.TreeMap;
 
 /* Import Tor descriptors into the ExoneraTor database. */
@@ -131,10 +132,11 @@ public class ExoneraTorDatabaseImporter {
     try {
       if (lockFile.exists()) {
         BufferedReader br = new BufferedReader(new FileReader(lockFile));
-        long runStarted = Long.parseLong(br.readLine());
+        Instant runStarted = Instant.ofEpochMilli(Long.parseLong(
+            br.readLine()));
         br.close();
-        if (System.currentTimeMillis() - runStarted
-            < 6L * 60L * 60L * 1000L) {
+        if (runStarted.plus(Duration.ofHours(6L))
+            .compareTo(Instant.now()) >= 0) {
           logger.warn("File 'exonerator-lock' is less than 6 "
               + "hours old.  Exiting.");
           System.exit(1);
@@ -223,7 +225,8 @@ public class ExoneraTorDatabaseImporter {
 
   /* Parse a consensus. */
   private static void parseConsensus(RelayNetworkStatusConsensus consensus) {
-    long validAfterMillis = consensus.getValidAfterMillis();
+    LocalDateTime validAfter = LocalDateTime.ofInstant(Instant.ofEpochMilli(
+        consensus.getValidAfterMillis()), ZoneOffset.UTC);
     for (NetworkStatusEntry entry : consensus.getStatusEntries().values()) {
       if (entry.getFlags().contains("Running")) {
         String fingerprintBase64 = null;
@@ -248,26 +251,21 @@ public class ExoneraTorDatabaseImporter {
           orAddresses.add(orAddressAndPort.substring(0,
               orAddressAndPort.lastIndexOf(":")));
         }
-        importStatusentry(validAfterMillis, fingerprintBase64, nickname,
+        importStatusentry(validAfter, fingerprintBase64, nickname,
             exit, orAddresses);
       }
     }
   }
 
-  /* UTC calendar for importing timestamps into the database. */
-  private static Calendar calendarUTC = Calendar.getInstance(
-      TimeZone.getTimeZone("UTC"));
-
   /* Import a status entry with one or more OR addresses into the
    * database. */
-  private static void importStatusentry(long validAfterMillis,
+  private static void importStatusentry(LocalDateTime validAfter,
       String fingerprintBase64, String nickname, Boolean exit,
       Set<String> orAddresses) {
     try {
       for (String orAddress : orAddresses) {
         insertStatusentryStatement.clearParameters();
-        insertStatusentryStatement.setTimestamp(1,
-            new Timestamp(validAfterMillis), calendarUTC);
+        insertStatusentryStatement.setObject(1, validAfter);
         insertStatusentryStatement.setString(2, fingerprintBase64);
         if (!orAddress.contains(":")) {
           insertStatusentryStatement.setString(3, orAddress);
@@ -353,23 +351,23 @@ public class ExoneraTorDatabaseImporter {
             exitAddressParts[2]);
         String exitAddress24 = Hex.encodeHexString(
             exitAddress24Bytes);
-        long scannedMillis = e.getValue();
+        LocalDateTime scanned = LocalDateTime.ofInstant(
+            Instant.ofEpochMilli(e.getValue()), ZoneOffset.UTC);
         importExitlistentry(fingerprintBase64, exitAddress24, exitAddress,
-            scannedMillis);
+            scanned);
       }
     }
   }
 
   /* Import an exit list entry into the database. */
   private static void importExitlistentry(String fingerprintBase64,
-      String exitAddress24, String exitAddress, long scannedMillis) {
+      String exitAddress24, String exitAddress, LocalDateTime scanned) {
     try {
       insertExitlistentryStatement.clearParameters();
       insertExitlistentryStatement.setString(1, fingerprintBase64);
       insertExitlistentryStatement.setString(2, exitAddress);
       insertExitlistentryStatement.setString(3, exitAddress24);
-      insertExitlistentryStatement.setTimestamp(4,
-          new Timestamp(scannedMillis), calendarUTC);
+      insertExitlistentryStatement.setObject(4, scanned);
       insertExitlistentryStatement.execute();
     } catch (SQLException e) {
       logger.error("Could not import exit list entry.  Exiting.", e);

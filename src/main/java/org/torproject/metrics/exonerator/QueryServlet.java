@@ -14,12 +14,15 @@ import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.DateTimeException;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -47,7 +50,9 @@ public class QueryServlet extends HttpServlet {
 
   private DataSource ds;
 
-  private static final long MILLISECONDS_IN_A_DAY = 24L * 60L * 60L * 1000L;
+  private static final DateTimeFormatter validAfterTimeFormatter
+      = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+      .withZone(ZoneOffset.UTC);
 
   @Override
   public void init() {
@@ -88,7 +93,7 @@ public class QueryServlet extends HttpServlet {
             "Missing timestamp parameter.");
         return;
       }
-      Long timestamp = this.parseTimestampParameter(timestampParameter);
+      LocalDate timestamp = this.parseTimestampParameter(timestampParameter);
       if (null == timestamp) {
         response.sendError(HttpServletResponse.SC_BAD_REQUEST,
             "Invalid timestamp parameter.");
@@ -216,9 +221,9 @@ public class QueryServlet extends HttpServlet {
     return address48;
   }
 
-  private Long parseTimestampParameter(
+  private LocalDate parseTimestampParameter(
       String passedTimestampParameter) {
-    Long timestamp = null;
+    LocalDate timestamp = null;
     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
     dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
     dateFormat.setLenient(false);
@@ -226,8 +231,8 @@ public class QueryServlet extends HttpServlet {
         && passedTimestampParameter.length() > 0) {
       String timestampParameter = passedTimestampParameter.trim();
       try {
-        timestamp = dateFormat.parse(timestampParameter).getTime();
-      } catch (ParseException e) {
+        timestamp = LocalDate.parse(timestampParameter);
+      } catch (DateTimeException e) {
         timestamp = null;
       }
     }
@@ -239,13 +244,13 @@ public class QueryServlet extends HttpServlet {
    * it matches the day before the current system date (in UTC) or is even
    * younger. */
   private boolean checkTimestampTooRecent(String timestampParameter) {
-    return timestampParameter.compareTo(ZonedDateTime.now(ZoneOffset.UTC)
-        .toLocalDate().minusDays(1).toString()) >= 0;
+    return timestampParameter.compareTo(LocalDate.now(ZoneOffset.UTC)
+        .minusDays(1).toString()) >= 0;
   }
 
   /* Helper methods for querying the database. */
 
-  private QueryResponse queryDatabase(String relayIp, long timestamp) {
+  private QueryResponse queryDatabase(String relayIp, LocalDate timestamp) {
 
     /* Convert address to hex. */
     String addressHex = !relayIp.contains(":")
@@ -255,23 +260,16 @@ public class QueryServlet extends HttpServlet {
     }
     String address24Hex = addressHex.substring(0, 6);
 
-    /* Prepare formatting response items. */
-    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-    dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-    SimpleDateFormat validAfterTimeFormat = new SimpleDateFormat(
-        "yyyy-MM-dd HH:mm:ss");
-    validAfterTimeFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-
     /* Store all dates contained in the query response in order to populate the
      * {first|last}_date_in_database and relevant_statuses fields. */
-    SortedSet<Long> allDates = new TreeSet<>();
+    SortedSet<LocalDate> allDates = new TreeSet<>();
 
     /* Store all possible matches for the results table by base64-encoded
      * fingerprint and valid-after time. This map is first populated by going
      * through the result set and adding or updating map entries, so that
      * there's one entry per fingerprint and valid-after time with one or more
      * addresses. In a second step, exit addresses are added to map entries. */
-    SortedMap<String, SortedMap<Long, QueryResponse.Match>>
+    SortedMap<String, SortedMap<LocalDateTime, QueryResponse.Match>>
         matchesByFingerprintBase64AndValidAfter = new TreeMap<>();
 
     /* Store all possible matches by address. This map has two purposes: First,
@@ -289,53 +287,50 @@ public class QueryServlet extends HttpServlet {
      * result set and later added to the two maps above containing matches. The
      * reason for separating these steps is that the result set may contain
      * status entries and exit list entries in any specific order. */
-    SortedMap<String, SortedMap<Long, String>>
+    SortedMap<String, SortedMap<LocalDateTime, String>>
         exitAddressesByFingeprintBase64AndScanned = new TreeMap<>();
 
     /* Make the database query to populate the sets and maps above. */
-    final long requestedConnection = System.currentTimeMillis();
-    Calendar utcCalendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    final Instant requestedConnection = Instant.now();
     try (Connection conn = this.ds.getConnection()) {
       try (CallableStatement cs = conn.prepareCall(
           "{call search_by_date_address24(?, ?)}")) {
-        cs.setDate(1, new java.sql.Date(timestamp), utcCalendar);
+        cs.setObject(1, timestamp);
         cs.setString(2, address24Hex);
         try (ResultSet rs = cs.executeQuery()) {
           while (rs.next()) {
-            java.sql.Date date = rs.getDate(1, utcCalendar);
+            LocalDate date = rs.getObject(1, LocalDate.class);
             String fingerprintBase64 = rs.getString(2);
-            java.sql.Timestamp scanned = rs.getTimestamp(3, utcCalendar);
+            LocalDateTime scanned = rs.getObject(3, LocalDateTime.class);
             String exitAddress = rs.getString(4);
-            java.sql.Timestamp validAfter = rs.getTimestamp(5, utcCalendar);
+            LocalDateTime validAfter = rs.getObject(5, LocalDateTime.class);
             String nickname = rs.getString(6);
             Boolean exit = rs.getBoolean(7);
             String orAddress = rs.getString(8);
             if (null != date) {
-              allDates.add(date.getTime());
+              allDates.add(date);
             } else if (null != scanned) {
-              long scannedMillis = scanned.getTime();
               exitAddressesByFingeprintBase64AndScanned.putIfAbsent(
                   fingerprintBase64, new TreeMap<>());
               exitAddressesByFingeprintBase64AndScanned.get(fingerprintBase64)
-                  .put(scannedMillis, exitAddress);
+                  .put(scanned, exitAddress);
             } else if (null != validAfter) {
-              long validAfterMillis = validAfter.getTime();
               matchesByFingerprintBase64AndValidAfter.putIfAbsent(
                   fingerprintBase64, new TreeMap<>());
               if (!matchesByFingerprintBase64AndValidAfter
-                  .get(fingerprintBase64).containsKey(validAfterMillis)) {
-                String validAfterString = validAfterTimeFormat.format(
-                    validAfterMillis);
+                  .get(fingerprintBase64).containsKey(validAfter)) {
+                String validAfterString = validAfter.format(
+                    validAfterTimeFormatter);
                 String fingerprint = Hex.encodeHexString(Base64.decodeBase64(
                     fingerprintBase64 + "=")).toUpperCase();
                 matchesByFingerprintBase64AndValidAfter.get(fingerprintBase64)
-                    .put(validAfterMillis, new QueryResponse.Match(
+                    .put(validAfter, new QueryResponse.Match(
                         validAfterString, new TreeSet<>(), fingerprint,
                         nickname, exit));
               }
               QueryResponse.Match match
                   = matchesByFingerprintBase64AndValidAfter
-                  .get(fingerprintBase64).get(validAfterMillis);
+                  .get(fingerprintBase64).get(validAfter);
               if (orAddress.contains(":")) {
                 match.addresses.add("[" + orAddress + "]");
               } else {
@@ -349,8 +344,8 @@ public class QueryServlet extends HttpServlet {
           this.logger.warn("Result set error.  Returning 'null'.", e);
           return null;
         }
-        this.logger.info("Returned a database connection to the pool after {}"
-            + " millis.", System.currentTimeMillis() - requestedConnection);
+        this.logger.info("Returned a database connection to the pool after {}.",
+            Duration.between(requestedConnection, Instant.now()));
       } catch (SQLException e) {
         this.logger.warn("Callable statement error.  Returning 'null'.", e);
         return null;
@@ -361,7 +356,7 @@ public class QueryServlet extends HttpServlet {
     }
 
     /* Go through exit addresses and update possible matches. */
-    for (Map.Entry<String, SortedMap<Long, String>> e
+    for (Map.Entry<String, SortedMap<LocalDateTime, String>> e
         : exitAddressesByFingeprintBase64AndScanned.entrySet()) {
       String fingerprintBase64 = e.getKey();
       if (!matchesByFingerprintBase64AndValidAfter.containsKey(
@@ -373,13 +368,12 @@ public class QueryServlet extends HttpServlet {
          * nearby matches. We'll just skip it. */
         continue;
       }
-      for (Map.Entry<Long, String> e1 : e.getValue().entrySet()) {
-        long scannedMillis = e1.getKey();
+      for (Map.Entry<LocalDateTime, String> e1 : e.getValue().entrySet()) {
+        LocalDateTime scanned = e1.getKey();
         String exitAddress = e1.getValue();
         for (QueryResponse.Match match
             : matchesByFingerprintBase64AndValidAfter.get(fingerprintBase64)
-            .subMap(scannedMillis, scannedMillis + MILLISECONDS_IN_A_DAY)
-            .values()) {
+            .subMap(scanned, scanned.plusDays(1L)).values()) {
           match.addresses.add(exitAddress);
           matchesByAddress.putIfAbsent(exitAddress, new HashSet<>());
           matchesByAddress.get(exitAddress).add(match);
@@ -390,13 +384,15 @@ public class QueryServlet extends HttpServlet {
     /* Write all results to a new QueryResponse object. */
     final QueryResponse response = new QueryResponse();
     response.queryAddress = relayIp;
-    response.queryDate = dateFormat.format(timestamp);
+    response.queryDate = timestamp.format(DateTimeFormatter.ISO_DATE);
     if (!allDates.isEmpty()) {
-      response.firstDateInDatabase = dateFormat.format(allDates.first());
-      response.lastDateInDatabase = dateFormat.format(allDates.last());
+      response.firstDateInDatabase = allDates.first()
+          .format(DateTimeFormatter.ISO_DATE);
+      response.lastDateInDatabase = allDates.last()
+          .format(DateTimeFormatter.ISO_DATE);
       response.relevantStatuses = allDates.contains(timestamp)
-          || allDates.contains(timestamp - MILLISECONDS_IN_A_DAY)
-          || allDates.contains(timestamp + MILLISECONDS_IN_A_DAY);
+          || allDates.contains(timestamp.minusDays(1L))
+          || allDates.contains(timestamp.plusDays(1L));
     }
     if (matchesByAddress.containsKey(relayIp)) {
       List<QueryResponse.Match> matchesList
