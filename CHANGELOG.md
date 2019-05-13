@@ -1,4 +1,8 @@
-# Changes in version 4.1.0 - 2019-05-??
+# Changes in version 4.1.0 - 2019-05-13
+
+ * Medium changes
+   - Stop signing jars.
+   - Use Java 8 date-time functionality.
 
  * Minor changes
    - Remove first link under "About Tor" and change second and third
