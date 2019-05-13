@@ -1,3 +1,10 @@
+# Changes in version 4.1.0 - 2019-05-??
+
+ * Minor changes
+   - Remove first link under "About Tor" and change second and third
+     link to adapt to redesigned Tor website.
+
+
 # Changes in version 4.0.0 - 2018-08-14
 
  * Major changes

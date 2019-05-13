@@ -373,7 +373,7 @@ public class ExoneraTorServlet extends HttpServlet {
   private void writeSummaryUnableToConnectToBackend(PrintWriter out,
       ResourceBundle rb) {
     String contactLink =
-        "<a href=\"https://www.torproject.org/about/contact\">"
+        "<a href=\"https://www.torproject.org/contact\">"
         + rb.getString("summary.serverproblem.dbempty.body.link")
         + "</a>";
     this.writeSummary(out, rb.getString("summary.heading"),
@@ -385,7 +385,7 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private void writeSummaryNoData(PrintWriter out, ResourceBundle rb) {
     String contactLink =
-        "<a href=\"https://www.torproject.org/about/contact\">"
+        "<a href=\"https://www.torproject.org/contact\">"
         + rb.getString("summary.serverproblem.dbempty.body.link")
         + "</a>";
     this.writeSummary(out, rb.getString("summary.heading"),
@@ -453,7 +453,7 @@ public class ExoneraTorServlet extends HttpServlet {
   private void writeSummaryNoDataForThisInterval(PrintWriter out,
       ResourceBundle rb) {
     String contactLink =
-        "<a href=\"https://www.torproject.org/about/contact\">"
+        "<a href=\"https://www.torproject.org/contact\">"
         + rb.getString("summary.serverproblem.dbempty.body.link")
         + "</a>";
     this.writeSummary(out, rb.getString("summary.heading"),
@@ -625,13 +625,10 @@ public class ExoneraTorServlet extends HttpServlet {
         + "        </div><!-- col -->\n",
         rb.getString("footer.abouttor.heading"),
         String.format(rb.getString("footer.abouttor.body.text"),
-            "<a href=\"https://www.torproject.org/about/"
-            + "overview#thesolution\">"
+            "<a href=\"https://www.torproject.org/about\">"
             + rb.getString("footer.abouttor.body.link1") + "</a>",
-            "<a href=\"https://www.torproject.org/about/overview\">"
-            + rb.getString("footer.abouttor.body.link2") + "</a>",
-            "<a href=\"https://www.torproject.org/about/contact\">"
-            + rb.getString("footer.abouttor.body.link3") + "</a>"));
+            "<a href=\"https://www.torproject.org/contact\">"
+            + rb.getString("footer.abouttor.body.link2") + "</a>"));
     out.printf("        <div class=\"col-xs-6\">\n"
         + "          <h3>%s</h3>\n"
         + "          <p class=\"small\">%s</p>\n"
