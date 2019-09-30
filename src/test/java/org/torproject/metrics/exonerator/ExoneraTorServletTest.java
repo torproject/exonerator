@@ -50,7 +50,7 @@ public class ExoneraTorServletTest {
       StringWriter sw = new StringWriter();
       es.writeSummaryAddressesInSameNetwork(new PrintWriter(sw), rb,
           "http://localhost:8080/", qr.queryAddress, qr.queryDate, "en",
-          Arrays.asList(qr.nearbyAddresses));
+          Arrays.asList(qr.nearbyAddresses), false);
       String errorMsg = "Test data:" + QueryResponse.toJson(qr)
           + "\nresult:\n" + sw.toString();
       assertTrue(errorMsg,

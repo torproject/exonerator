@@ -89,6 +89,7 @@ public class ExoneraTorServlet extends HttpServlet {
       ExoneraTorDate firstDate = ExoneraTorDate.INVALID;
       ExoneraTorDate lastDate = ExoneraTorDate.INVALID;
       boolean noRelevantConsensuses = true;
+      boolean missingData = false;
       List<String[]> statusEntries = new ArrayList<>();
       List<String> addressesInSameNetwork = null;
 
@@ -104,6 +105,14 @@ public class ExoneraTorServlet extends HttpServlet {
           if (null != queryResponse.relevantStatuses
               && queryResponse.relevantStatuses) {
             noRelevantConsensuses = false;
+          }
+          if (null != queryResponse.missingStatuses
+              && queryResponse.missingStatuses) {
+            missingData = true;
+          }
+          if (null != queryResponse.missingExitLists
+              && queryResponse.missingExitLists) {
+            missingData = true;
           }
           if (null != queryResponse.matches) {
             for (QueryResponse.Match match : queryResponse.matches) {
@@ -210,15 +219,18 @@ public class ExoneraTorServlet extends HttpServlet {
         /* Print out result. */
       } else {
         if (!statusEntries.isEmpty()) {
-          this.writeSummaryPositive(out, rb, relayIp, requestedDate.asString);
+          this.writeSummaryPositive(out, rb, relayIp, requestedDate.asString,
+              missingData);
           this.writeTechnicalDetails(out, rb, relayIp, requestedDate.asString,
               statusEntries);
         } else if (addressesInSameNetwork != null
             && !addressesInSameNetwork.isEmpty()) {
           this.writeSummaryAddressesInSameNetwork(out, rb, requestUrl, relayIp,
-              requestedDate.asString, langStr, addressesInSameNetwork);
+              requestedDate.asString, langStr, addressesInSameNetwork,
+              missingData);
         } else {
-          this.writeSummaryNegative(out, rb, relayIp, requestedDate.asString);
+          this.writeSummaryNegative(out, rb, relayIp, requestedDate.asString,
+              missingData);
         }
         this.writePermanentLink(out, rb, requestUrl, relayIp,
             requestedDate.asString, langStr);
@@ -398,13 +410,13 @@ public class ExoneraTorServlet extends HttpServlet {
   private void writeSummaryNoTimestamp(PrintWriter out, ResourceBundle rb) {
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-danger",
-        rb.getString("summary.invalidparams.notimestamp.title"), null,
+        rb.getString("summary.invalidparams.notimestamp.title"), null, null,
         rb.getString("summary.invalidparams.notimestamp.body"));
   }
 
   private void writeSummaryNoIp(PrintWriter out, ResourceBundle rb) {
     this.writeSummary(out, rb.getString("summary.heading"),
-        "panel-danger", rb.getString("summary.invalidparams.noip.title"),
+        "panel-danger", rb.getString("summary.invalidparams.noip.title"), null,
         null, rb.getString("summary.invalidparams.noip.body"));
   }
 
@@ -413,7 +425,7 @@ public class ExoneraTorServlet extends HttpServlet {
       String lastDate) {
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-danger",
-        rb.getString("summary.invalidparams.timestamprange.title"), null,
+        rb.getString("summary.invalidparams.timestamprange.title"), null, null,
         rb.getString("summary.invalidparams.timestamprange.body"),
         timestampStr, firstDate, lastDate);
   }
@@ -438,7 +450,7 @@ public class ExoneraTorServlet extends HttpServlet {
         : StringEscapeUtils.escapeHtml4(timestampParameter);
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-danger",
-        rb.getString("summary.invalidparams.invalidtimestamp.title"),
+        rb.getString("summary.invalidparams.invalidtimestamp.title"), null,
         null, rb.getString("summary.invalidparams.invalidtimestamp.body"),
         escapedTimestampParameter, "\"YYYY-MM-DD\"");
   }
@@ -446,7 +458,7 @@ public class ExoneraTorServlet extends HttpServlet {
   private void writeSummaryTimestampTooRecent(PrintWriter out,
       ResourceBundle rb) {
     this.writeSummary(out, rb.getString("summary.heading"), "panel-danger",
-        rb.getString("summary.invalidparams.timestamptoorecent.title"),
+        rb.getString("summary.invalidparams.timestamptoorecent.title"), null,
         null, rb.getString("summary.invalidparams.timestamptoorecent.body"));
   }
 
@@ -465,7 +477,8 @@ public class ExoneraTorServlet extends HttpServlet {
 
   void writeSummaryAddressesInSameNetwork(PrintWriter out,
       ResourceBundle rb, String requestUrl, String relayIp, String timestampStr,
-      String langStr, List<String> addressesInSameNetwork) {
+      String langStr, List<String> addressesInSameNetwork,
+      boolean missingData) {
     Object[][] panelItems = new Object[addressesInSameNetwork.size()][];
     for (int i = 0; i < addressesInSameNetwork.size(); i++) {
       String addressInSameNetwork = addressesInSameNetwork.get(i);
@@ -486,33 +499,36 @@ public class ExoneraTorServlet extends HttpServlet {
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-warning",
         rb.getString("summary.negativesamenetwork.title"), panelItems,
+        missingData ? rb.getString("summary.missingdata") : null,
         rb.getString("summary.negativesamenetwork.body"),
         relayIp, timestampStr, relayIp.contains(":") ? 48 : 24);
   }
 
   private void writeSummaryPositive(PrintWriter out, ResourceBundle rb,
-      String relayIp, String timestampStr) {
+      String relayIp, String timestampStr, boolean missingData) {
     String formattedRelayIp = relayIp.contains(":")
         ? "[" + relayIp + "]" : relayIp;
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-success", rb.getString("summary.positive.title"), null,
+        missingData ? rb.getString("summary.missingdata") : null,
         rb.getString("summary.positive.body"), formattedRelayIp,
         timestampStr);
   }
 
   private void writeSummaryNegative(PrintWriter out, ResourceBundle rb,
-      String relayIp, String timestampStr) {
+      String relayIp, String timestampStr, boolean missingData) {
     String formattedRelayIp = relayIp.contains(":")
         ? "[" + relayIp + "]" : relayIp;
     this.writeSummary(out, rb.getString("summary.heading"),
         "panel-warning", rb.getString("summary.negative.title"), null,
+        missingData ? rb.getString("summary.missingdata") : null,
         rb.getString("summary.negative.body"), formattedRelayIp,
         timestampStr);
   }
 
   private void writeSummary(PrintWriter out, String heading,
       String panelContext, String panelTitle, Object[][] panelItems,
-      String panelBodyTemplate, Object... panelBodyArgs) {
+      String panelWarning, String panelBodyTemplate, Object... panelBodyArgs) {
     out.printf("      <div class=\"row\">\n"
         + "        <div class=\"col-xs-12\">\n"
         + "          <h2>%s</h2>\n"
@@ -530,6 +546,9 @@ public class ExoneraTorServlet extends HttpServlet {
             panelItem);
       }
       out.print("              </ul>\n");
+    }
+    if (null != panelWarning) {
+      out.printf("              <p>%s</p>\n", panelWarning);
     }
     out.print("            </div><!-- panel-body -->\n"
         + "          </div><!-- panel -->\n"
