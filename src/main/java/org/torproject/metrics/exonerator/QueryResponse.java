@@ -21,7 +21,7 @@ public class QueryResponse {
   private static Logger logger = LoggerFactory.getLogger(QueryResponse.class);
 
   /* Actual version implemented by this class. */
-  private static final String VERSION = "1.1";
+  private static final String VERSION = "1.0";
 
   /* Don't accept query responses with versions lower than this. */
   private static final String FIRSTRECOGNIZEDVERSION = "1.0";
@@ -60,20 +60,6 @@ public class QueryResponse {
    * a day of the requested date; {@code null} if the database is empty. */
   Boolean relevantStatuses;
 
-  /** Whether there are at least 18 hours of statuses missing in the database
-   * within a day of the requested date; {@code null} if the database is
-   * empty.
-   *
-   * @since 1.1 */
-  Boolean missingStatuses;
-
-  /** Whether there are at least 18 hours of exit lists missing in the database
-   * from two days before the requested date until one day after; {@code null}
-   * if the database is empty.
-   *
-   * @since 1.1 */
-  Boolean missingExitLists;
-
   /** All matches for the given IP address and date; {@code null} if there
    * were no matches at all. */
   Match[] matches;
@@ -84,16 +70,13 @@ public class QueryResponse {
   /** Constructor for tests. */
   QueryResponse(String version, String queryAddress, String queryDate,
       String firstDateInDatabase, String lastDateInDatabase,
-      Boolean relevantStatuses, Boolean missingStatuses,
-      Boolean missingExitLists, Match[] matches, String[] nearbyAddresses) {
+      Boolean relevantStatuses, Match[] matches, String[] nearbyAddresses) {
     this.version = version;
     this.queryAddress = queryAddress;
     this.queryDate = queryDate;
     this.firstDateInDatabase = firstDateInDatabase;
     this.lastDateInDatabase = lastDateInDatabase;
     this.relevantStatuses = relevantStatuses;
-    this.missingStatuses = missingStatuses;
-    this.missingExitLists = missingExitLists;
     this.matches = matches;
     this.nearbyAddresses = nearbyAddresses;
   }

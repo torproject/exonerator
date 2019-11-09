@@ -42,12 +42,10 @@ public class QueryResponseTest {
           + "\"exit\":false}],\"nearby_addresses\":[\"12.13.14.15\","
           + "\"12.13.14.16\"]}"},
         {new QueryResponse("1.1", null, null, null,
-          null, false, true, true, null, null),
-          "{\"version\":\"1.1\",\"relevant_statuses\":false,"
-            + "\"missing_statuses\":true,"
-            + "\"missing_exit_lists\":true}"},
+          null, false, null, null),
+          "{\"version\":\"1.1\",\"relevant_statuses\":false}"},
         {new QueryResponse("1.0", "12.13.14.15", "2016-12-12", "2016-01-01",
-          "2016-12-31", true, false, false,
+          "2016-12-31", true,
         new QueryResponse.Match[]{new QueryResponse.Match("2016-12-03",
         new TreeSet<>(Arrays.asList("12.13.14.15", "12.13.14.16")),
         "fingerprint-not-checked", "some name", true),
@@ -61,8 +59,6 @@ public class QueryResponseTest {
           + "\"first_date_in_database\":\"2016-01-01\","
           + "\"last_date_in_database\":\"2016-12-31\","
           + "\"relevant_statuses\":true,"
-          + "\"missing_statuses\":false,"
-          + "\"missing_exit_lists\":false,"
           + "\"matches\":[{\"timestamp\":\"2016-12-03\","
           + "\"addresses\":[\"12.13.14.15\","
           + "\"12.13.14.16\"],\"fingerprint\":\"fingerprint-not-checked\","
@@ -74,7 +70,7 @@ public class QueryResponseTest {
           + "\"exit\":false}],\"nearby_addresses\":[\"12.13.14.15\","
           + "\"12.13.14.16\"]}"},
         {new QueryResponse("1.0", "12.13.14.15", "2016-12-12", "2016-01-01",
-            "2016-12-31", false, null, null,
+            "2016-12-31", false,
             new QueryResponse.Match[]{new QueryResponse.Match("2016-12-03",
             new TreeSet<>(Arrays.asList("12.13.14.15", "12.13.14.16")),
             "fingerprint-not-checked", "some name", null),

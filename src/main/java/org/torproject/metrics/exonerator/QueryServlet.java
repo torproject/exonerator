@@ -54,10 +54,6 @@ public class QueryServlet extends HttpServlet {
       = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
       .withZone(ZoneOffset.UTC);
 
-  private static final int MISSING_STATUSES_IF_LESS_THAN = 3 * 24 - 17;
-
-  private static final int MISSING_EXIT_LISTS_IF_LESS_THAN = 4 * 24 - 17;
-
   @Override
   public void init() {
     this.logger = LoggerFactory.getLogger(QueryServlet.class);
@@ -268,14 +264,6 @@ public class QueryServlet extends HttpServlet {
      * {first|last}_date_in_database and relevant_statuses fields. */
     SortedSet<LocalDate> allDates = new TreeSet<>();
 
-    /* Store all hours for which the database contains relevant status
-     * entries. */
-    Set<LocalDateTime> allStatusHours = new HashSet<>();
-
-    /* Store all hours for which the database contains relevant exit list
-     * entries. */
-    Set<LocalDateTime> allExitListHours = new HashSet<>();
-
     /* Store all possible matches for the results table by base64-encoded
      * fingerprint and valid-after time. This map is first populated by going
      * through the result set and adding or updating map entries, so that
@@ -321,12 +309,12 @@ public class QueryServlet extends HttpServlet {
             String orAddress = rs.getString(8);
             if (null != date) {
               allDates.add(date);
-            } else if (null != scanned && null != fingerprintBase64) {
+            } else if (null != scanned) {
               exitAddressesByFingeprintBase64AndScanned.putIfAbsent(
                   fingerprintBase64, new TreeMap<>());
               exitAddressesByFingeprintBase64AndScanned.get(fingerprintBase64)
                   .put(scanned, exitAddress);
-            } else if (null != validAfter && null != fingerprintBase64) {
+            } else if (null != validAfter) {
               matchesByFingerprintBase64AndValidAfter.putIfAbsent(
                   fingerprintBase64, new TreeMap<>());
               if (!matchesByFingerprintBase64AndValidAfter
@@ -350,10 +338,6 @@ public class QueryServlet extends HttpServlet {
               }
               matchesByAddress.putIfAbsent(orAddress, new HashSet<>());
               matchesByAddress.get(orAddress).add(match);
-            } else if (null != validAfter) {
-              allStatusHours.add(validAfter);
-            } else if (null != scanned) {
-              allExitListHours.add(scanned);
             }
           }
         } catch (SQLException e) {
@@ -410,10 +394,6 @@ public class QueryServlet extends HttpServlet {
           || allDates.contains(timestamp.minusDays(1L))
           || allDates.contains(timestamp.plusDays(1L));
     }
-    response.missingStatuses = allStatusHours.size()
-        < MISSING_STATUSES_IF_LESS_THAN;
-    response.missingExitLists = allExitListHours.size()
-        < MISSING_EXIT_LISTS_IF_LESS_THAN;
     if (matchesByAddress.containsKey(relayIp)) {
       List<QueryResponse.Match> matchesList
           = new ArrayList<>(matchesByAddress.get(relayIp));

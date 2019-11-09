@@ -279,24 +279,20 @@ CREATE OR REPLACE FUNCTION insert_exitlistentry_exitaddress (
   END;
 $$ LANGUAGE 'plpgsql';
 
--- Search by date and /24 IPv4 or IPv6 prefix for:
---  - exit list entries with an IPv4 exit address in the same /24 network and
---    with a scan time not earlier than two days before and not later than one
---    day after the given date,
---  - status entries with an IPv4 or IPv6 onion routing address in the same /24
---    network as the given hex-encoded IP address prefix and with a valid-after
---    date within a day of the given date,
---  - the first and last dates in the database as well as the dates for which
---    the database contains relevant data within a day of the given date,
---  - the hours for which the database contains relevant exit list entries, and
---  - the hours for which the database contains relevant status entries.
+-- Search for (1) status entries with an IPv4 or IPv6 onion routing address in
+-- the same /24 network as the given hex-encoded IP address prefix and with a
+-- valid-after date within a day of the given date, (2) exit list entries with
+-- an IPv4 exit address in the same /24 network and with a scan time not earlier
+-- than two days before and not later than one day after the given date, and (3)
+-- the last and first dates in the database as well as the dates for which the
+-- database contains relevant data within a day of the given date.
 --
 -- This function makes heavy use of the date_address24 table in order to reduce
 -- query response time by first obtaining all relevant fingerprint identifiers.
--- In the next step it runs five selects to obtain status entries, exit list
--- entries, relevant dates, and relevant hours. Any postprocessing, including
--- filtering by exact IP address or matching status entries and exit list
--- entries, needs to happen at the caller.
+-- In the next step it runs three selects to obtain status entries, exit list
+-- entries, and relevant dates. Any postprocessing, including filtering by exact
+-- IP address or matching status entries and exit list entries, needs to happen
+-- at the caller.
 CREATE OR REPLACE FUNCTION search_by_date_address24 (
   search_date DATE, search_address24 CHARACTER(6))
     RETURNS TABLE(
@@ -343,21 +339,7 @@ CREATE OR REPLACE FUNCTION search_by_date_address24 (
      WHERE date IN (SELECT MIN(date) FROM date_address24 UNION
                     SELECT MAX(date) FROM date_address24 UNION
                     SELECT date FROM date_address24
-                    WHERE date >= $1 - 1 AND date <= $1 + 1)
-     UNION
-     SELECT NULL AS date, NULL AS fingerprint_base64,
-           DATE_TRUNC(''hour'', scanned) AS scanned, NULL AS exitaddress,
-           NULL AS validafter, NULL AS nickname, NULL AS exit, NULL AS oraddress
-       FROM exitlistentry_exitaddress
-       WHERE DATE(exitlistentry_exitaddress.scanned) >= $1 - 2
-       AND DATE(exitlistentry_exitaddress.scanned) <= $1 + 1
-     UNION
-     SELECT NULL AS date, NULL AS fingerprint_base64, NULL AS scanned,
-           NULL AS exitaddress, DATE_TRUNC(''hour'', validafter) AS validafter,
-           NULL AS nickname, NULL AS exit, NULL AS oraddress
-       FROM statusentry_oraddress
-       WHERE DATE(statusentry_oraddress.validafter) >= $1 - 1
-       AND DATE(statusentry_oraddress.validafter) <= $1 + 1'
+                    WHERE date >= $1 - 1 AND date <= $1 + 1)'
     USING search_date, search_address24;
 END;
 $$ LANGUAGE plpgsql;
