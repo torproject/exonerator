@@ -1,4 +1,4 @@
-# Changes in version 4.2.0 - 2019-0?-??
+# Changes in version 4.2.0 - 2019-11-09
 
  * Medium changes
    - Use Ivy for resolving external dependencies rather than relying
@@ -12,6 +12,7 @@
      few exceptions.
    - Remove Cobertura from the build process.
    - Update PostgreSQL JDBC driver version to 42.2.5.
+   - Update to metrics-lib 2.9.1.
 
 
 # Changes in version 4.1.0 - 2019-05-13
