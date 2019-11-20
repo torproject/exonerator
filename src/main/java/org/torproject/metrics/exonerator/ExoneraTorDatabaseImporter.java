@@ -76,14 +76,10 @@ public class ExoneraTorDatabaseImporter {
     try {
       BufferedReader br = new BufferedReader(new FileReader(configFile));
       while ((line = br.readLine()) != null) {
-        if (line.startsWith("#") || line.length() < 1) {
-          continue;
-        } else if (line.startsWith("ExoneraTorDatabaseJdbc")) {
+        if (line.startsWith("ExoneraTorDatabaseJdbc")) {
           jdbcString = line.split(" ")[1];
         } else if (line.startsWith("ExoneraTorImportDirectory")) {
           importDirString = line.split(" ")[1];
-        } else {
-          /* Ignore unrecognized configuration keys. */
         }
       }
       br.close();
