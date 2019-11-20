@@ -380,7 +380,7 @@ public class ExoneraTorDatabaseImporter {
           parseHistoryFile));
       for (Map.Entry<String, Long> historyEntry :
           nextImportHistory.entrySet()) {
-        bw.write(String.valueOf(historyEntry.getValue()) + ","
+        bw.write(historyEntry.getValue() + ","
             + historyEntry.getKey() + "\n");
       }
       bw.close();
