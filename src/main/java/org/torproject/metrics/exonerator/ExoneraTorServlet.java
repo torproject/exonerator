@@ -140,8 +140,14 @@ public class ExoneraTorServlet extends HttpServlet {
       PrintWriter out = new PrintWriter(so);
       this.writeHeader(out, rb, langStr);
 
-      /* Obtain request URL without query string parameters for links. */
-      String requestUrl = request.getRequestURL().toString();
+      /* Obtain the current request URI for relative links and the configured
+       * base URL for absolute links like the printed permanent link. If no base
+       * URL has been configured, use the current request URL for the permanent
+       * link. */
+      String requestUri = request.getRequestURI();
+      String baseUrl = this.getServletContext().getInitParameter("baseUrl");
+      String permanentLinkUrl = (null != baseUrl)
+          ? (baseUrl + requestUri) : request.getRequestURL().toString();
 
       /* Write form. */
       boolean timestampOutOfRange = requestedDate.valid
@@ -157,43 +163,43 @@ public class ExoneraTorServlet extends HttpServlet {
       /* If both parameters are empty, don't print any summary and exit.
        * This is the start page. */
       if ("".equals(relayIp) && requestedDate.empty) {
-        this.writeFooter(out, rb, requestUrl, null, null);
+        this.writeFooter(out, rb, requestUri, null, null);
 
         /* If only one parameter is empty and the other is not, print summary
          * with warning message and exit. */
       } else if ("".equals(relayIp)) {
         this.writeSummaryNoIp(out, rb);
-        this.writeFooter(out, rb, requestUrl, null, null);
+        this.writeFooter(out, rb, requestUri, null, null);
       } else if (requestedDate.empty) {
         this.writeSummaryNoTimestamp(out, rb);
-        this.writeFooter(out, rb, requestUrl, null, null);
+        this.writeFooter(out, rb, requestUri, null, null);
 
         /* If there's an issue with parsing either of the parameters, print
          * summary with error message and exit. */
       } else if (relayIpHasError) {
         this.writeSummaryInvalidIp(out, rb, ipParameter);
-        this.writeFooter(out, rb, requestUrl, null, null);
+        this.writeFooter(out, rb, requestUri, null, null);
       } else if (!requestedDate.valid) {
         this.writeSummaryInvalidTimestamp(out, rb, requestedDate.asRequested);
-        this.writeFooter(out, rb, requestUrl, null, null);
+        this.writeFooter(out, rb, requestUri, null, null);
 
         /* If the timestamp is too recent, print summary with error message and
          * exit. */
       } else if (requestedDate.tooRecent) {
         this.writeSummaryTimestampTooRecent(out, rb);
-        this.writeFooter(out, rb, requestUrl, null, null);
+        this.writeFooter(out, rb, requestUri, null, null);
 
         /* If we were unable to connect to the database,
          * write an error message. */
       } else if (!successfullyConnectedToBackend) {
         this.writeSummaryUnableToConnectToBackend(out, rb);
-        this.writeFooter(out, rb, requestUrl, null, null);
+        this.writeFooter(out, rb, requestUri, null, null);
 
         /* Similarly, if we found the database to be empty,
          * write an error message, too. */
       } else if (firstDate.empty || lastDate.empty) {
         this.writeSummaryNoData(out, rb);
-        this.writeFooter(out, rb, requestUrl, null, null);
+        this.writeFooter(out, rb, requestUri, null, null);
 
         /* If the requested date is out of range, tell the user. */
       } else if (timestampOutOfRange) {
@@ -201,11 +207,11 @@ public class ExoneraTorServlet extends HttpServlet {
         this.writeSummaryTimestampOutsideRange(out, rb, requestedDate.asString,
             firstDate.asString, lastDate.date.isBefore(dayBeforeYesterday)
             ? lastDate.asString : dayBeforeYesterday.format(ISO_LOCAL_DATE));
-        this.writeFooter(out, rb, requestUrl, relayIp, requestedDate.asString);
+        this.writeFooter(out, rb, requestUri, relayIp, requestedDate.asString);
 
       } else if (noRelevantConsensuses) {
         this.writeSummaryNoDataForThisInterval(out, rb);
-        this.writeFooter(out, rb, requestUrl, relayIp, requestedDate.asString);
+        this.writeFooter(out, rb, requestUri, relayIp, requestedDate.asString);
 
         /* Print out result. */
       } else {
@@ -215,14 +221,14 @@ public class ExoneraTorServlet extends HttpServlet {
               statusEntries);
         } else if (addressesInSameNetwork != null
             && !addressesInSameNetwork.isEmpty()) {
-          this.writeSummaryAddressesInSameNetwork(out, rb, requestUrl, relayIp,
+          this.writeSummaryAddressesInSameNetwork(out, rb, requestUri, relayIp,
               requestedDate.asString, langStr, addressesInSameNetwork);
         } else {
           this.writeSummaryNegative(out, rb, relayIp, requestedDate.asString);
         }
-        this.writePermanentLink(out, rb, requestUrl, relayIp,
+        this.writePermanentLink(out, rb, permanentLinkUrl, relayIp,
             requestedDate.asString, langStr);
-        this.writeFooter(out, rb, requestUrl, relayIp, requestedDate.asString);
+        this.writeFooter(out, rb, requestUri, relayIp, requestedDate.asString);
       }
 
       /* Forward to the JSP that adds header and footer. */
@@ -464,7 +470,7 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   void writeSummaryAddressesInSameNetwork(PrintWriter out,
-      ResourceBundle rb, String requestUrl, String relayIp, String timestampStr,
+      ResourceBundle rb, String requestUri, String relayIp, String timestampStr,
       String langStr, List<String> addressesInSameNetwork) {
     Object[][] panelItems = new Object[addressesInSameNetwork.size()][];
     for (int i = 0; i < addressesInSameNetwork.size(); i++) {
@@ -474,11 +480,11 @@ public class ExoneraTorServlet extends HttpServlet {
       if (addressInSameNetwork.contains(":")) {
         address = addressInSameNetwork.replaceAll("[\\[\\]]", "");
         link = String.format("%s?ip=[%s]&timestamp=%s&lang=%s",
-            requestUrl, address.replaceAll(":", "%3A"), timestampStr, langStr);
+            requestUri, address.replaceAll(":", "%3A"), timestampStr, langStr);
         address = "[" + address + "]";
       } else {
         link = String.format("%s?ip=%s&timestamp=%s&lang=%s",
-            requestUrl, addressInSameNetwork, timestampStr, langStr);
+            requestUri, addressInSameNetwork, timestampStr, langStr);
         address = addressInSameNetwork;
       }
       panelItems[i] = new Object[] { link, address };
@@ -600,7 +606,8 @@ public class ExoneraTorServlet extends HttpServlet {
   }
 
   private void writePermanentLink(PrintWriter out, ResourceBundle rb,
-      String requestUrl, String relayIp, String timestampStr, String langStr) {
+      String permanentLinkUrl, String relayIp, String timestampStr,
+      String langStr) {
     String encodedAddress = relayIp.contains(":")
         ? "[" + relayIp.replaceAll(":", "%3A") + "]" : relayIp;
     out.printf("      <div class=\"row\">\n"
@@ -610,12 +617,12 @@ public class ExoneraTorServlet extends HttpServlet {
           + "timestamp=%s&amp;lang=%s</pre>\n"
         + "        </div><!-- col -->\n"
         + "      </div><!-- row -->\n",
-        rb.getString("permanentlink.heading"), requestUrl,
+        rb.getString("permanentlink.heading"), permanentLinkUrl,
         encodedAddress, timestampStr, langStr);
   }
 
   private void writeFooter(PrintWriter out, ResourceBundle rb,
-      String requestUrl, String relayIp, String timestampStr) {
+      String requestUri, String relayIp, String timestampStr) {
     out.printf("    </div><!-- container -->\n"
         + "    <div class=\"container\">\n"
         + "      <div class=\"row\">\n"
@@ -644,11 +651,11 @@ public class ExoneraTorServlet extends HttpServlet {
         : this.availableLanguageNames.entrySet()) {
       if (null != relayIp && null != timestampStr) {
         out.printf(" <a href=\"%s?ip=%s&timestamp=%s&lang=%s\">%s</a>",
-            requestUrl, relayIp, timestampStr, entry.getKey(),
+            requestUri, relayIp, timestampStr, entry.getKey(),
             entry.getValue());
       } else {
         out.printf(" <a href=\"%s?lang=%s\">%s</a>",
-            requestUrl, entry.getKey(), entry.getValue());
+            requestUri, entry.getKey(), entry.getValue());
       }
     }
     out.printf("</p>\n"
