@@ -1,10 +1,11 @@
-# Changes in version 4.?.? - 2019-1?-??
+# Changes in version 4.3.0 - 2020-01-15
 
  * Medium changes
    - Turn absolute links to nearby addresses and translations into
      relative links to avoid falling back to http://. Use the base URL
      from the deployment descriptor for the printed permanent link,
      also to avoid falling back to http://.
+   - Update to metrics-lib 2.10.0.
 
 
 # Changes in version 4.2.0 - 2019-11-09
