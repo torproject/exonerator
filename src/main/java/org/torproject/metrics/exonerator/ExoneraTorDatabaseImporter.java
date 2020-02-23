@@ -172,9 +172,8 @@ public class ExoneraTorDatabaseImporter {
     File parseHistoryFile = new File("stats",
         "exonerator-import-history");
     if (parseHistoryFile.exists()) {
-      try {
-        BufferedReader br = new BufferedReader(new FileReader(
-            parseHistoryFile));
+      try (BufferedReader br = new BufferedReader(new FileReader(
+            parseHistoryFile))) {
         String line;
         int lineNumber = 0;
         while ((line = br.readLine()) != null) {
@@ -185,14 +184,12 @@ public class ExoneraTorDatabaseImporter {
                 + "contains a corrupt entry in line {}.  "
                 + "Ignoring parse history file entirely.", lineNumber);
             lastImportHistory.clear();
-            br.close();
             return;
           }
           long lastModified = Long.parseLong(parts[0]);
           String filename = parts[1];
           lastImportHistory.put(filename, lastModified);
         }
-        br.close();
       } catch (IOException e) {
         logger.warn("Could not read import history.  Ignoring.", e);
         lastImportHistory.clear();
@@ -375,15 +372,13 @@ public class ExoneraTorDatabaseImporter {
   private static void writeImportHistoryToDisk() {
     File parseHistoryFile = new File("stats/exonerator-import-history");
     parseHistoryFile.getParentFile().mkdirs();
-    try {
-      BufferedWriter bw = new BufferedWriter(new FileWriter(
-          parseHistoryFile));
+    try (BufferedWriter bw = new BufferedWriter(new FileWriter(
+          parseHistoryFile))) {
       for (Map.Entry<String, Long> historyEntry :
           nextImportHistory.entrySet()) {
         bw.write(historyEntry.getValue() + ","
             + historyEntry.getKey() + "\n");
       }
-      bw.close();
     } catch (IOException e) {
       logger.warn("File 'stats/exonerator-import-history' could "
           + "not be written.  Ignoring.", e);
