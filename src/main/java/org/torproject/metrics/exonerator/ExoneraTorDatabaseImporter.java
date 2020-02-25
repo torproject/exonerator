@@ -25,6 +25,8 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -397,7 +399,11 @@ public class ExoneraTorDatabaseImporter {
   /* Delete the exonerator-lock file to allow the next executing of this
    * tool. */
   private static void deleteLockFile() {
-    new File("exonerator-lock").delete();
+    try {
+      Files.delete(Paths.get("exonerator-lock"));
+    } catch (IOException e) {
+      logger.warn("Could not delete lock file \"exonerator-lock\"", e);
+    }
   }
 }
 
