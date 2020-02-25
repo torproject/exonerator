@@ -244,7 +244,7 @@ public class ExoneraTorDatabaseImporter {
         orAddresses.add(entry.getAddress());
         for (String orAddressAndPort : entry.getOrAddresses()) {
           orAddresses.add(orAddressAndPort.substring(0,
-              orAddressAndPort.lastIndexOf(":")));
+              orAddressAndPort.lastIndexOf(':')));
         }
         importStatusentry(validAfter, fingerprintBase64, nickname,
             exit, orAddresses);
