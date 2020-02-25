@@ -228,7 +228,7 @@ public class ExoneraTorDatabaseImporter {
         try {
           fingerprintBase64 = Base64.encodeBase64String(
               Hex.decodeHex(entry.getFingerprint().toCharArray()))
-              .replaceAll("=", "");
+              .replace("=", "");
         } catch (DecoderException e) {
           logger.warn("Unable to decode hex fingerprint {} to convert it back "
               + "to base64. Aborting import.", entry.getFingerprint(), e);
@@ -295,7 +295,7 @@ public class ExoneraTorDatabaseImporter {
                 + "s", "0"));
             if (!addressHexString.contains("x")
                 && addressHexString.length() == 32) {
-              orAddress24 = addressHexString.replaceAll(" ", "0")
+              orAddress24 = addressHexString.replace(" ", "0")
                   .toLowerCase().substring(0, 6);
             }
           }
@@ -327,7 +327,7 @@ public class ExoneraTorDatabaseImporter {
         try {
           fingerprintBase64 = Base64.encodeBase64String(
               Hex.decodeHex(entry.getFingerprint().toCharArray()))
-              .replaceAll("=", "");
+              .replace("=", "");
         } catch (DecoderException ex) {
           logger.warn("Unable to decode hex fingerprint {} to convert to "
               + "base64. Aborting import.", entry.getFingerprint(), ex);

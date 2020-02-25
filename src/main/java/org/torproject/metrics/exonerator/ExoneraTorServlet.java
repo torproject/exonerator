@@ -480,7 +480,7 @@ public class ExoneraTorServlet extends HttpServlet {
       if (addressInSameNetwork.contains(":")) {
         address = addressInSameNetwork.replaceAll("[\\[\\]]", "");
         link = String.format("%s?ip=[%s]&timestamp=%s&lang=%s",
-            requestUri, address.replaceAll(":", "%3A"), timestampStr, langStr);
+            requestUri, address.replace(":", "%3A"), timestampStr, langStr);
         address = "[" + address + "]";
       } else {
         link = String.format("%s?ip=%s&timestamp=%s&lang=%s",
@@ -609,7 +609,7 @@ public class ExoneraTorServlet extends HttpServlet {
       String permanentLinkUrl, String relayIp, String timestampStr,
       String langStr) {
     String encodedAddress = relayIp.contains(":")
-        ? "[" + relayIp.replaceAll(":", "%3A") + "]" : relayIp;
+        ? "[" + relayIp.replace(":", "%3A") + "]" : relayIp;
     out.printf("      <div class=\"row\">\n"
         + "        <div class=\"col-xs-12\">\n"
         + "          <h2>%s</h2>\n"

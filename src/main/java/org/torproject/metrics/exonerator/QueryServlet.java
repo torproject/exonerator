@@ -214,7 +214,7 @@ public class QueryServlet extends HttpServlet {
           + "s", "0"));
       if (!addressHexString.contains("x")
           && addressHexString.length() == 32) {
-        address48 = addressHexString.replaceAll(" ", "0")
+        address48 = addressHexString.replace(" ", "0")
             .toLowerCase();
       }
     }
