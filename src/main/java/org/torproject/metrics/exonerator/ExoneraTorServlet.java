@@ -138,7 +138,7 @@ public class ExoneraTorServlet extends HttpServlet {
       /* Start writing response. */
       StringWriter so = new StringWriter();
       PrintWriter out = new PrintWriter(so);
-      this.writeHeader(out, rb, langStr);
+      this.writeHeader(out);
 
       /* Obtain the current request URI for relative links and the configured
        * base URL for absolute links like the printed permanent link. If no base
@@ -321,7 +321,7 @@ public class ExoneraTorServlet extends HttpServlet {
 
   /* Helper methods for writing the response. */
 
-  private void writeHeader(PrintWriter out, ResourceBundle rb, String langStr) {
+  private void writeHeader(PrintWriter out) {
     out.printf("    <div class=\"container\">\n");
   }
 
