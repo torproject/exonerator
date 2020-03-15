@@ -1,5 +1,8 @@
 # Changes in version 4.?.? - 2020-0?-??
 
+ * Minor changes
+   - Improve logging of the database importer.
+
 
 # Changes in version 4.3.0 - 2020-01-15
 
