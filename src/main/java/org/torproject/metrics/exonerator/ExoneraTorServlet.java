@@ -16,6 +16,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.URL;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -150,12 +151,15 @@ public class ExoneraTorServlet extends HttpServlet {
           ? (baseUrl + requestUri) : request.getRequestURL().toString();
 
       /* Write form. */
+      String defaultDateString = LocalDate.now(ZoneOffset.UTC)
+          .minusDays(2).toString();
       boolean timestampOutOfRange = requestedDate.valid
           && (firstDate.valid && requestedDate.date.isBefore(firstDate.date)
           || (lastDate.valid && requestedDate.date.isAfter(lastDate.date)));
       this.writeForm(out, rb, relayIp, relayIpHasError
           || ("".equals(relayIp) && !requestedDate.empty),
-          requestedDate.asString, !relayIpHasError
+          requestedDate.valid ? requestedDate.asString : defaultDateString,
+          !relayIpHasError
           && !("".equals(relayIp) && !requestedDate.valid)
           && (!requestedDate.valid || timestampOutOfRange
           || (!"".equals(relayIp) && requestedDate.empty)), langStr);

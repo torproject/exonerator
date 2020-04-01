@@ -1,5 +1,8 @@
 # Changes in version 4.?.? - 2020-0?-??
 
+ * Medium changes
+   - Default date picker to latest available date.
+
  * Minor changes
    - Improve logging of the database importer.
    - Simplify logging configuration.
