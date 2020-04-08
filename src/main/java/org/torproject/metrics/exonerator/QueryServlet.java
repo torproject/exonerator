@@ -46,7 +46,8 @@ public class QueryServlet extends HttpServlet {
 
   private static final long serialVersionUID = 7109011659099295183L;
 
-  private Logger logger;
+  private static final Logger logger
+      = LoggerFactory.getLogger(QueryServlet.class);
 
   private DataSource ds;
 
@@ -56,15 +57,13 @@ public class QueryServlet extends HttpServlet {
 
   @Override
   public void init() {
-    this.logger = LoggerFactory.getLogger(QueryServlet.class);
-
     /* Look up data source. */
     try {
       Context cxt = new InitialContext();
       this.ds = (DataSource) cxt.lookup("java:comp/env/jdbc/exonerator");
-      this.logger.info("Successfully looked up data source.");
+      logger.info("Successfully looked up data source.");
     } catch (NamingException e) {
-      this.logger.warn("Could not look up data source", e);
+      logger.warn("Could not look up data source", e);
     }
   }
 
@@ -341,17 +340,17 @@ public class QueryServlet extends HttpServlet {
             }
           }
         } catch (SQLException e) {
-          this.logger.warn("Result set error.  Returning 'null'.", e);
+          logger.warn("Result set error.  Returning 'null'.", e);
           return null;
         }
-        this.logger.info("Returned a database connection to the pool after {}.",
+        logger.info("Returned a database connection to the pool after {}.",
             Duration.between(requestedConnection, Instant.now()));
       } catch (SQLException e) {
-        this.logger.warn("Callable statement error.  Returning 'null'.", e);
+        logger.warn("Callable statement error.  Returning 'null'.", e);
         return null;
       }
     } catch (Throwable e) { // Catch all problems left.
-      this.logger.warn("Database error.  Returning 'null'.", e);
+      logger.warn("Database error.  Returning 'null'.", e);
       return null;
     }
 

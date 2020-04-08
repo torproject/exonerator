@@ -18,7 +18,8 @@ import java.util.SortedSet;
 /** Query response from the ExoneraTor database. */
 public class QueryResponse {
 
-  private static Logger logger = LoggerFactory.getLogger(QueryResponse.class);
+  private static final Logger logger
+      = LoggerFactory.getLogger(QueryResponse.class);
 
   /* Actual version implemented by this class. */
   private static final String VERSION = "1.0";

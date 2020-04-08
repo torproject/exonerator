@@ -2,6 +2,7 @@
 
  * Minor changes
    - Improve logging of the database importer.
+   - Simplify logging configuration.
 
 
 # Changes in version 4.3.0 - 2020-01-15

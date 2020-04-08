@@ -47,7 +47,7 @@ import java.util.TreeMap;
 /* Import Tor descriptors into the ExoneraTor database. */
 public class ExoneraTorDatabaseImporter {
 
-  private static Logger logger
+  private static final Logger logger
       = LoggerFactory.getLogger(ExoneraTorDatabaseImporter.class);
 
   /** Main function controlling the parsing process. */

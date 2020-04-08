@@ -36,7 +36,8 @@ public class ExoneraTorServlet extends HttpServlet {
 
   private static final long serialVersionUID = 1370088989739567509L;
 
-  private Logger logger;
+  private static final Logger logger
+      = LoggerFactory.getLogger(ExoneraTorServlet.class);
 
   private String exoneraTorHost = System.getProperty("exonerator.url",
       "https://exonerator.torproject.org");
@@ -49,7 +50,6 @@ public class ExoneraTorServlet extends HttpServlet {
   @Override
   public void init(ServletConfig config) throws ServletException {
     super.init(config);
-    this.logger = LoggerFactory.getLogger(ExoneraTorServlet.class);
     this.availableLanguageNames = new TreeMap<>();
     for (String locale : this.availableLanguages) {
       ResourceBundle rb = ResourceBundle.getBundle("ExoneraTor",
