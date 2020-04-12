@@ -3,6 +3,8 @@
  * Minor changes
    - Improve logging of the database importer.
    - Simplify logging configuration.
+   - Set default locale `US` and default time zone `UTC` at the
+     beginning of the execution.
 
 
 # Changes in version 4.3.0 - 2020-01-15

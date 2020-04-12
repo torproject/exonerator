@@ -29,7 +29,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.SortedSet;
-import java.util.TimeZone;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
@@ -224,7 +223,6 @@ public class QueryServlet extends HttpServlet {
       String passedTimestampParameter) {
     LocalDate timestamp = null;
     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-    dateFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
     dateFormat.setLenient(false);
     if (passedTimestampParameter != null
         && passedTimestampParameter.length() > 0) {

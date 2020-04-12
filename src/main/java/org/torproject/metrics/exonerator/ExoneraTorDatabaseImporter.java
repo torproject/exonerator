@@ -39,9 +39,11 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
+import java.util.TimeZone;
 import java.util.TreeMap;
 
 /* Import Tor descriptors into the ExoneraTor database. */
@@ -52,6 +54,8 @@ public class ExoneraTorDatabaseImporter {
 
   /** Main function controlling the parsing process. */
   public static void main(String[] args) {
+    Locale.setDefault(Locale.US);
+    TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
     logger.info("Starting ExoneraTor database importer.");
     readConfiguration();
     openDatabaseConnection();
