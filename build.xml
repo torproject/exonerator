@@ -9,7 +9,7 @@
 
   <property name="javadoc-title" value="ExoneraTor API Documentation"/>
   <property name="implementation-title" value="ExoneraTor" />
-  <property name="release.version" value="4.4.0" />
+  <property name="release.version" value="4.4.0-dev" />
   <property name="metricslibversion" value="2.11.0" />
   <property name="jetty.version" value="-9.2.21.v20170120" />
   <property name="warfile"
