@@ -1,7 +1,8 @@
-# Changes in version 4.?.? - 2020-0?-??
+# Changes in version 4.4.0 - 2020-04-13
 
  * Medium changes
    - Default date picker to latest available date.
+   - Update to metrics-lib 2.11.0.
 
  * Minor changes
    - Improve logging of the database importer.
